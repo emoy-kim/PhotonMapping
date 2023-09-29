@@ -1,22 +1,22 @@
 #include "photon_map.h"
 
-PhotonMapGL::PhotonMapGL() : SampleNum( 256 ), MaxDepth( 100 ), MaxGlobalPhotonNum( 1'000'000 )
-{
-
-}
-
 void PhotonMapGL::setObjects(const std::vector<object_t>& objects)
 {
    Objects.clear();
    ToWorlds.clear();
+   WorldBounds.clear();
    Objects.resize( objects.size() );
    ToWorlds.resize( objects.size() );
+   WorldBounds.resize( objects.size() );
    for (size_t i = 0; i < objects.size(); ++i) {
       Objects[i] = std::make_shared<ObjectGL>();
       Objects[i]->setObject( GL_TRIANGLES, std::get<0>( objects[i] ) );
       Objects[i]->setObjectType( std::get<1>( objects[i] ) );
       Objects[i]->setDiffuseReflectionColor( std::get<2>( objects[i] ) );
       ToWorlds[i] = std::get<3>( objects[i] );
+      WorldBounds[i] = Objects[i]->getBoundingBox();
+      WorldBounds[i].MinPoint = glm::vec3(ToWorlds[i] * glm::vec4(WorldBounds[i].MinPoint, 1.0f));
+      WorldBounds[i].MaxPoint = glm::vec3(ToWorlds[i] * glm::vec4(WorldBounds[i].MaxPoint, 1.0f));
    }
 }
 

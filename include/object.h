@@ -2,6 +2,14 @@
 
 #include "shader.h"
 
+struct Rect
+{
+   glm::vec3 MinPoint;
+   glm::vec3 MaxPoint;
+
+   Rect() : MinPoint(), MaxPoint() {}
+};
+
 class ObjectGL
 {
 public:
@@ -18,12 +26,6 @@ public:
    void setDiffuseReflectionColor(const glm::vec4& diffuse_reflection_color);
    void setSpecularReflectionColor(const glm::vec4& specular_reflection_color);
    void setSpecularReflectionExponent(const float& specular_reflection_exponent);
-   void setObject(GLenum draw_mode, const std::vector<glm::vec3>& vertices);
-   void setObject(
-      GLenum draw_mode,
-      const std::vector<glm::vec3>& vertices,
-      const std::vector<glm::vec3>& normals
-   );
    void setObject(
       GLenum draw_mode,
       const std::vector<glm::vec3>& vertices,
@@ -44,24 +46,9 @@ public:
       const std::string& out_file_root_path,
       const std::string& separator
    );
-   void setSquareObject(GLenum draw_mode, bool use_texture = true);
-   void setSquareObject(
-      GLenum draw_mode,
-      const std::string& texture_file_path,
-      bool is_grayscale = false
-   );
    int addTexture(const std::string& texture_file_path, bool is_grayscale = false);
    void addTexture(int width, int height, bool is_grayscale = false);
-   int addTexture(const uint8_t* image_buffer, int width, int height, bool is_grayscale = false);
    void transferUniformsToShader(const ShaderGL* shader) const;
-   void updateDataBuffer(const std::vector<glm::vec3>& vertices, const std::vector<glm::vec3>& normals);
-   void updateDataBuffer(
-      const std::vector<glm::vec3>& vertices,
-      const std::vector<glm::vec3>& normals,
-      const std::vector<glm::vec2>& textures
-   );
-   void replaceVertices(const std::vector<glm::vec3>& vertices, bool normals_exist, bool textures_exist);
-   void replaceVertices(const std::vector<float>& vertices, bool normals_exist, bool textures_exist);
    void releaseCustomBuffer(const std::string& name)
    {
       const auto it = CustomBuffers.find( name );
@@ -78,12 +65,7 @@ public:
    [[nodiscard]] GLsizei getVertexNum() const { return VerticesCount; }
    [[nodiscard]] GLsizei getIndexNum() const { return static_cast<GLsizei>(IndexBuffer.size()); }
    [[nodiscard]] GLuint getTextureID(int index) const { return TextureID[index]; }
-   [[nodiscard]] int getTextureNum() const { return static_cast<int>(TextureID.size()); }
-   [[nodiscard]] GLuint getCustomBufferID(const std::string& name) const
-   {
-      const auto it = CustomBuffers.find( name );
-      return it == CustomBuffers.end() ? 0 : it->second;
-   }
+   [[nodiscard]] Rect getBoundingBox() const { return BoundingBox; }
 
    template<typename T>
    [[nodiscard]] GLuint addCustomBufferObject(const std::string& name, int data_size)
@@ -102,6 +84,7 @@ protected:
    GLuint IBO;
    GLenum DrawMode;
    GLsizei VerticesCount;
+   Rect BoundingBox;
    std::vector<GLuint> TextureID;
    std::vector<GLfloat> DataBuffer;
    std::vector<GLuint> IndexBuffer;
@@ -118,11 +101,6 @@ protected:
    void prepareTexture(bool normals_exist) const;
    void prepareVertexBuffer(int n_bytes_per_vertex);
    void prepareIndexBuffer();
-   static void getSquareObject(
-      std::vector<glm::vec3>& vertices,
-      std::vector<glm::vec3>& normals,
-      std::vector<glm::vec2>& textures
-   );
    static void findNormals(
       std::vector<glm::vec3>& normals,
       const std::vector<glm::vec3>& vertices,
