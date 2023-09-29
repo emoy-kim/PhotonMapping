@@ -80,6 +80,7 @@ private:
 
    GLFWwindow* Window;
    bool Pause;
+   bool NeedToUpdate;
    int FrameWidth;
    int FrameHeight;
    int ShadowMapSize;
@@ -115,7 +116,7 @@ private:
    void setLightViewFrameBuffers();
    void drawObjects(ShaderGL* shader, CameraGL* camera) const;
    void drawDepthMapFromLightView();
-   void drawShadow() const;
+   void drawSceneWithShadow() const;
    void render();
 
    // renderer_kdtree.cpp

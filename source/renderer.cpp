@@ -1,8 +1,8 @@
 #include "renderer.h"
 
 RendererGL::RendererGL() :
-   Window( nullptr ), Pause( false ), FrameWidth( 1024 ), FrameHeight( 1024 ), ShadowMapSize( 1024 ), DepthFBO( 0 ),
-   DepthTextureArrayID( 0 ), ClickedPoint( -1, -1 ), ActiveCamera( nullptr ),
+   Window( nullptr ), Pause( false ), NeedToUpdate( true ), FrameWidth( 1024 ), FrameHeight( 1024 ),
+   ShadowMapSize( 1024 ), DepthFBO( 0 ), DepthTextureArrayID( 0 ), ClickedPoint( -1, -1 ), ActiveCamera( nullptr ),
    MainCamera( std::make_unique<CameraGL>() ),
    PCFSceneShader( std::make_unique<ShaderGL>() ),
    LightViewDepthShader( std::make_unique<ShaderGL>() ), Lights( std::make_unique<LightGL>() ),
@@ -132,6 +132,7 @@ void RendererGL::keyboard(GLFWwindow* window, int key, int scancode, int action,
          std::cout << ">> Depth Array Captured\n";
          break;
       case GLFW_KEY_L:
+         Renderer->NeedToUpdate = true;
          Renderer->Lights->toggleLightSwitch();
          std::cout << ">> Light Turned " << (Renderer->Lights->isLightOn() ? "On!\n" : "Off!\n");
          break;
@@ -169,6 +170,7 @@ void RendererGL::cursor(GLFWwindow* window, double xpos, double ypos)
 
       Renderer->ClickedPoint.x = x;
       Renderer->ClickedPoint.y = y;
+      Renderer->NeedToUpdate = true;
    }
 }
 
@@ -269,11 +271,15 @@ void RendererGL::setObjects()
          glm::rotate( glm::mat4(1.0f), glm::radians( -30.0f ), glm::vec3(1.0f, 0.0f, 0.0f) ) * to_tiger_object
       ),
       std::make_tuple(
-         std::string(sample_directory_path + "/CornellBox/CornellBox-Water.obj"),
+         std::string(sample_directory_path + "/CornellBox/floor.obj"),
          glm::vec4(1.0f), cornell_box_scale
       ),
       std::make_tuple(
          std::string(sample_directory_path + "/CornellBox/ceiling.obj"),
+         glm::vec4(1.0f), cornell_box_scale
+      ),
+      std::make_tuple(
+         std::string(sample_directory_path + "/CornellBox/back_wall.obj"),
          glm::vec4(1.0f), cornell_box_scale
       ),
       std::make_tuple(
@@ -372,7 +378,7 @@ void RendererGL::drawDepthMapFromLightView()
    glColorMask( GL_TRUE, GL_TRUE, GL_TRUE, GL_TRUE );
 }
 
-void RendererGL::drawShadow() const
+void RendererGL::drawSceneWithShadow() const
 {
    glViewport( 0, 0, FrameWidth, FrameHeight );
    glBindFramebuffer( GL_FRAMEBUFFER, 0 );
@@ -392,15 +398,12 @@ void RendererGL::drawShadow() const
 
 void RendererGL::render()
 {
-   glClear( GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT );
-
-   std::chrono::time_point<std::chrono::system_clock> start = std::chrono::system_clock::now();
-
-   drawDepthMapFromLightView();
-   drawShadow();
-
-   std::chrono::time_point<std::chrono::system_clock> end = std::chrono::system_clock::now();
-   const auto fps = 1E+6 / static_cast<double>(std::chrono::duration_cast<std::chrono::microseconds>(end - start).count());
+   if (NeedToUpdate) {
+      glClear( GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT );
+      drawDepthMapFromLightView();
+      drawSceneWithShadow();
+      NeedToUpdate = false;
+   }
 }
 
 void RendererGL::play()
