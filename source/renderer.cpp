@@ -198,49 +198,6 @@ void RendererGL::registerCallbacks() const
    glfwSetMouseButtonCallback( Window, mouse );
 }
 
-void RendererGL::setLights()
-{
-   glm::vec4 light_position(0.0f, 500.0f, 500.0f, 1.0f);
-   glm::vec4 ambient_color(0.1f, 0.1f, 0.1f, 1.0f);
-   glm::vec4 diffuse_color(0.7f, 0.7f, 0.7f, 1.0f);
-   glm::vec4 specular_color(0.7f, 0.7f, 0.7f, 1.0f);
-   const glm::vec3 reference_position(0.0f, 150.0f, 0.0f);
-   Lights->addLight(
-      light_position, ambient_color, diffuse_color, specular_color,
-      reference_position - glm::vec3(light_position),
-      25.0f,
-      0.5f,
-      1000.0f
-   );
-
-   light_position = glm::vec4(0.0f, 0.0f, 500.0f, 1.0f);
-   ambient_color = glm::vec4(0.2f, 0.2f, 0.2f, 1.0f);
-   diffuse_color = glm::vec4(0.5f, 0.5f, 0.5f, 1.0f);
-   specular_color = glm::vec4(0.5f, 0.5f, 0.5f, 1.0f);
-   Lights->addLight( light_position, ambient_color, diffuse_color, specular_color );
-
-   const std::vector<glm::vec3> reference_points = {
-      glm::vec3(Lights->getLightPosition( 0 )) + Lights->getSpotlightDirection( 0 ),
-      glm::vec3(0.0f)
-   };
-
-   const int light_num = Lights->getTotalLightNum();
-   LightViewMatrices.resize( light_num );
-   LightViewProjectionMatrices.resize( light_num );
-   LightCameras.resize( light_num );
-   for (int i = 0; i < light_num; ++i) {
-      LightCameras[i] = std::make_unique<CameraGL>();
-      LightCameras[i]->updatePerspectiveCamera( ShadowMapSize, ShadowMapSize );
-      LightCameras[i]->updateNearFarPlanes( 100.0f, 1000.0f );
-      LightCameras[i]->updateCameraView(
-         glm::vec3(Lights->getLightPosition( i )),
-         reference_points[i],
-         glm::vec3(0.0f, 1.0f, 0.0f)
-      );
-   }
-   ActiveCamera = LightCameras[0].get();
-}
-
 void RendererGL::setObjects()
 {
    const glm::mat4 to_tiger_object =
@@ -306,23 +263,6 @@ void RendererGL::setObjects()
    PhotonMap->setObjects( objects );
 }
 
-void RendererGL::setShaders() const
-{
-   const std::string shader_directory_path = std::string(CMAKE_SOURCE_DIR) + "/shaders";
-   PCFSceneShader->setShader(
-      std::string(shader_directory_path + "/shadow/scene_shader.vert").c_str(),
-      std::string(shader_directory_path + "/shadow/scene_shader.frag").c_str()
-   );
-   LightViewDepthShader->setShader(
-      std::string(shader_directory_path + "/shadow/light_view_depth_generator.vert").c_str(),
-      std::string(shader_directory_path + "/shadow/light_view_depth_generator.frag").c_str()
-   );
-   LightViewDepthShader->setLightViewUniformLocations();
-   PCFSceneShader->setSceneUniformLocations( Lights->getTotalLightNum() );
-
-   setKdtreeShaders();
-}
-
 void RendererGL::setLightViewFrameBuffers()
 {
    glCreateTextures( GL_TEXTURE_2D_ARRAY, 1, &DepthTextureArrayID );
@@ -342,6 +282,68 @@ void RendererGL::setLightViewFrameBuffers()
    if (glCheckNamedFramebufferStatus( DepthFBO, GL_FRAMEBUFFER ) != GL_FRAMEBUFFER_COMPLETE) {
       std::cerr << "DepthFBO Setup Error\n";
    }
+}
+
+void RendererGL::setLights()
+{
+   glm::vec4 light_position(0.0f, 500.0f, 500.0f, 1.0f);
+   glm::vec4 ambient_color(0.1f, 0.1f, 0.1f, 1.0f);
+   glm::vec4 diffuse_color(0.7f, 0.7f, 0.7f, 1.0f);
+   glm::vec4 specular_color(0.7f, 0.7f, 0.7f, 1.0f);
+   const glm::vec3 reference_position(0.0f, 150.0f, 0.0f);
+   Lights->addLight(
+      light_position, ambient_color, diffuse_color, specular_color,
+      reference_position - glm::vec3(light_position),
+      25.0f,
+      0.5f,
+      1000.0f
+   );
+
+   light_position = glm::vec4(0.0f, 0.0f, 500.0f, 1.0f);
+   ambient_color = glm::vec4(0.2f, 0.2f, 0.2f, 1.0f);
+   diffuse_color = glm::vec4(0.5f, 0.5f, 0.5f, 1.0f);
+   specular_color = glm::vec4(0.5f, 0.5f, 0.5f, 1.0f);
+   Lights->addLight( light_position, ambient_color, diffuse_color, specular_color );
+
+   const std::vector<glm::vec3> reference_points = {
+      glm::vec3(Lights->getLightPosition( 0 )) + Lights->getSpotlightDirection( 0 ),
+      glm::vec3(0.0f)
+   };
+
+   const int light_num = Lights->getTotalLightNum();
+   LightViewMatrices.resize( light_num );
+   LightViewProjectionMatrices.resize( light_num );
+   LightCameras.resize( light_num );
+   for (int i = 0; i < light_num; ++i) {
+      LightCameras[i] = std::make_unique<CameraGL>();
+      LightCameras[i]->updatePerspectiveCamera( ShadowMapSize, ShadowMapSize );
+      LightCameras[i]->updateNearFarPlanes( 100.0f, 1000.0f );
+      LightCameras[i]->updateCameraView(
+         glm::vec3(Lights->getLightPosition( i )),
+         reference_points[i],
+         glm::vec3(0.0f, 1.0f, 0.0f)
+      );
+   }
+   ActiveCamera = LightCameras[0].get();
+
+   setLightViewFrameBuffers();
+}
+
+void RendererGL::setShaders() const
+{
+   const std::string shader_directory_path = std::string(CMAKE_SOURCE_DIR) + "/shaders";
+   LightViewDepthShader->setShader(
+      std::string(shader_directory_path + "/shadow/light_view_depth_generator.vert").c_str(),
+      std::string(shader_directory_path + "/shadow/light_view_depth_generator.frag").c_str()
+   );
+   PCFSceneShader->setShader(
+      std::string(shader_directory_path + "/shadow/scene_shader.vert").c_str(),
+      std::string(shader_directory_path + "/shadow/scene_shader.frag").c_str()
+   );
+   LightViewDepthShader->setLightViewUniformLocations();
+   PCFSceneShader->setSceneUniformLocations( Lights->getTotalLightNum() );
+
+   setKdtreeShaders();
 }
 
 void RendererGL::drawObjects(ShaderGL* shader, CameraGL* camera) const
@@ -410,10 +412,9 @@ void RendererGL::play()
 {
    if (glfwWindowShouldClose( Window )) initialize();
 
-   setLights();
    setObjects();
+   setLights();
    setShaders();
-   setLightViewFrameBuffers();
    //buildKdtree();
 
    while (!glfwWindowShouldClose( Window )) {

@@ -110,10 +110,10 @@ private:
    static void cursor(GLFWwindow* window, double xpos, double ypos);
    static void mouse(GLFWwindow* window, int button, int action, int mods);
 
-   void setLights();
    void setObjects();
-   void setShaders() const;
    void setLightViewFrameBuffers();
+   void setLights();
+   void setShaders() const;
    void drawObjects(ShaderGL* shader, CameraGL* camera) const;
    void drawDepthMapFromLightView();
    void drawSceneWithShadow() const;
