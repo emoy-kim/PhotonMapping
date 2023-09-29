@@ -2,7 +2,8 @@
 
 #include "kdtree_object.h"
 
-using object_t = std::tuple<std::string, glm::vec4, glm::mat4>; // <file path, color, world matrix>
+// <file path, type, color, world matrix>
+using object_t = std::tuple<std::string, ObjectGL::TYPE, glm::vec4, glm::mat4>;
 
 class PhotonMapGL final
 {
@@ -17,7 +18,7 @@ public:
       Photon() : Power(), Position(), IncomingDirection(), KDTreeSplittingPlane( -1 ) {}
    };
 
-   PhotonMapGL(int max_global_photon_num, int max_depth);
+   PhotonMapGL();
    ~PhotonMapGL() = default;
 
    void setObjects(const std::vector<object_t>& objects);
@@ -25,6 +26,7 @@ public:
    [[nodiscard]] const std::vector<std::shared_ptr<ObjectGL>>& getObjects() const { return Objects; }
 
 private:
+   const int SampleNum;
    const int MaxDepth;
    const int MaxGlobalPhotonNum;
    std::vector<Photon> Photons;

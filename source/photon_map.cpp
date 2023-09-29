@@ -1,7 +1,6 @@
 #include "photon_map.h"
 
-PhotonMapGL::PhotonMapGL(int max_global_photon_num, int max_depth) :
-   MaxDepth( max_depth ), MaxGlobalPhotonNum( max_global_photon_num )
+PhotonMapGL::PhotonMapGL() : SampleNum( 256 ), MaxDepth( 100 ), MaxGlobalPhotonNum( 1'000'000 )
 {
 
 }
@@ -15,8 +14,9 @@ void PhotonMapGL::setObjects(const std::vector<object_t>& objects)
    for (size_t i = 0; i < objects.size(); ++i) {
       Objects[i] = std::make_shared<ObjectGL>();
       Objects[i]->setObject( GL_TRIANGLES, std::get<0>( objects[i] ) );
-      Objects[i]->setDiffuseReflectionColor( std::get<1>( objects[i] ) );
-      ToWorlds[i] = std::get<2>( objects[i] );
+      Objects[i]->setObjectType( std::get<1>( objects[i] ) );
+      Objects[i]->setDiffuseReflectionColor( std::get<2>( objects[i] ) );
+      ToWorlds[i] = std::get<3>( objects[i] );
    }
 }
 

@@ -5,14 +5,14 @@
 class ObjectGL
 {
 public:
-   enum class OBJECT_TYPE { ARBITRARY = 0, PLANE, SPHERE, BOX  };
+   enum class TYPE { ARBITRARY = 0, PLANE, SPHERE, BOX  };
 
    enum LOCATION_LAYOUT { VERTEX = 0, NORMAL, TEXTURE };
 
    ObjectGL();
    virtual ~ObjectGL();
 
-   void setObjectType(const OBJECT_TYPE& type) { Type = type; }
+   void setObjectType(const TYPE& type) { Type = type; }
    void setEmissionColor(const glm::vec4& emission_color);
    void setAmbientReflectionColor(const glm::vec4& ambient_reflection_color);
    void setDiffuseReflectionColor(const glm::vec4& diffuse_reflection_color);
@@ -70,7 +70,7 @@ public:
          CustomBuffers.erase( it );
       }
    }
-   [[nodiscard]] OBJECT_TYPE getObjectType() const { return Type; }
+   [[nodiscard]] int getObjectType() const { return static_cast<int>(Type); }
    [[nodiscard]] GLuint getVAO() const { return VAO; }
    [[nodiscard]] GLuint getVBO() const { return VBO; }
    [[nodiscard]] GLuint getIBO() const { return IBO; }
@@ -96,7 +96,7 @@ public:
    }
 
 protected:
-   OBJECT_TYPE Type;
+   TYPE Type;
    GLuint VAO;
    GLuint VBO;
    GLuint IBO;

@@ -1,7 +1,7 @@
 #include "object.h"
 
 ObjectGL::ObjectGL() :
-   Type( OBJECT_TYPE::ARBITRARY ), VAO( 0 ), VBO( 0 ), IBO( 0 ), DrawMode( 0 ), VerticesCount( 0 ),
+   Type( TYPE::ARBITRARY ), VAO( 0 ), VBO( 0 ), IBO( 0 ), DrawMode( 0 ), VerticesCount( 0 ),
    EmissionColor( 0.1f, 0.1f, 0.1f, 1.0f ), AmbientReflectionColor( 0.2f, 0.2f, 0.2f, 1.0f ),
    DiffuseReflectionColor( 0.8f, 0.8f, 0.8f, 1.0f ), SpecularReflectionColor( 0.8f, 0.8f, 0.8f, 1.0f ),
    SpecularReflectionExponent( 16.0f )

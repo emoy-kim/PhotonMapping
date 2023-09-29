@@ -3,10 +3,9 @@
 RendererGL::RendererGL() :
    Window( nullptr ), Pause( false ), NeedToUpdate( true ), FrameWidth( 1024 ), FrameHeight( 1024 ),
    ShadowMapSize( 1024 ), DepthFBO( 0 ), DepthTextureArrayID( 0 ), ClickedPoint( -1, -1 ), ActiveCamera( nullptr ),
-   MainCamera( std::make_unique<CameraGL>() ),
-   PCFSceneShader( std::make_unique<ShaderGL>() ),
+   MainCamera( std::make_unique<CameraGL>() ), PCFSceneShader( std::make_unique<ShaderGL>() ),
    LightViewDepthShader( std::make_unique<ShaderGL>() ), Lights( std::make_unique<LightGL>() ),
-   PhotonMap( std::make_unique<PhotonMapGL>( 1'000'000, 100 ) ), KdtreeBuilder()
+   PhotonMap( std::make_unique<PhotonMapGL>() ), KdtreeBuilder()
 {
    Renderer = this;
 
@@ -40,6 +39,7 @@ void RendererGL::initialize()
    glfwWindowHint( GLFW_CONTEXT_VERSION_MINOR, 6 );
    glfwWindowHint( GLFW_DOUBLEBUFFER, GLFW_TRUE );
    glfwWindowHint( GLFW_RESIZABLE, GLFW_FALSE );
+   glfwWindowHint( GLFW_VISIBLE, GLFW_FALSE );
    glfwWindowHint( GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE );
 
    Window = glfwCreateWindow( FrameWidth, FrameHeight, "Cinematic Relighting", nullptr, nullptr );
@@ -207,56 +207,56 @@ void RendererGL::setObjects()
    const std::string sample_directory_path = std::string(CMAKE_SOURCE_DIR) + "/samples";
    const std::vector<object_t> objects = {
       std::make_tuple(
-         std::string(sample_directory_path + "/Tiger/tiger.obj"),
+         std::string(sample_directory_path + "/Tiger/tiger.obj"), ObjectGL::TYPE::ARBITRARY,
          glm::vec4(1.0f),
          glm::translate( glm::mat4(1.0f), glm::vec3(200.0f, 0.0f, 0.0f) ) * to_tiger_object
       ),
       std::make_tuple(
-         std::string(sample_directory_path + "/Tiger/tiger.obj"),
+         std::string(sample_directory_path + "/Tiger/tiger.obj"), ObjectGL::TYPE::ARBITRARY,
          glm::vec4(1.0f),
          glm::translate( glm::mat4(1.0f), glm::vec3(-150.0f, 0.0f, 0.0f) ) * to_tiger_object
       ),
       std::make_tuple(
-         std::string(sample_directory_path + "/Tiger/tiger.obj"),
+         std::string(sample_directory_path + "/Tiger/tiger.obj"), ObjectGL::TYPE::ARBITRARY,
          glm::vec4(1.0f),
          glm::translate( glm::mat4(1.0f), glm::vec3(50.0f, 0.0f, -100.0f) ) * to_tiger_object
       ),
       std::make_tuple(
-         std::string(sample_directory_path + "/Tiger/tiger.obj"),
+         std::string(sample_directory_path + "/Tiger/tiger.obj"), ObjectGL::TYPE::ARBITRARY,
          glm::vec4(1.0f),
          glm::translate( glm::mat4(1.0f), glm::vec3(50.0f, 30.0f, 200.0f) ) *
          glm::rotate( glm::mat4(1.0f), glm::radians( -30.0f ), glm::vec3(1.0f, 0.0f, 0.0f) ) * to_tiger_object
       ),
       std::make_tuple(
-         std::string(sample_directory_path + "/CornellBox/floor.obj"),
+         std::string(sample_directory_path + "/CornellBox/floor.obj"), ObjectGL::TYPE::PLANE,
          glm::vec4(1.0f), cornell_box_scale
       ),
       std::make_tuple(
-         std::string(sample_directory_path + "/CornellBox/ceiling.obj"),
+         std::string(sample_directory_path + "/CornellBox/ceiling.obj"), ObjectGL::TYPE::PLANE,
          glm::vec4(1.0f), cornell_box_scale
       ),
       std::make_tuple(
-         std::string(sample_directory_path + "/CornellBox/back_wall.obj"),
+         std::string(sample_directory_path + "/CornellBox/back_wall.obj"), ObjectGL::TYPE::PLANE,
          glm::vec4(1.0f), cornell_box_scale
       ),
       std::make_tuple(
-         std::string(sample_directory_path + "/CornellBox/left_wall.obj"),
+         std::string(sample_directory_path + "/CornellBox/left_wall.obj"), ObjectGL::TYPE::PLANE,
          glm::vec4(1.0f, 0.0f, 0.0f, 1.0f), cornell_box_scale
       ),
       std::make_tuple(
-         std::string(sample_directory_path + "/CornellBox/right_wall.obj"),
+         std::string(sample_directory_path + "/CornellBox/right_wall.obj"), ObjectGL::TYPE::PLANE,
          glm::vec4(0.0f, 0.0f, 1.0f, 1.0f), cornell_box_scale
       ),
       std::make_tuple(
-         std::string(sample_directory_path + "/CornellBox/left_sphere.obj"),
+         std::string(sample_directory_path + "/CornellBox/left_sphere.obj"), ObjectGL::TYPE::SPHERE,
          glm::vec4(1.0f), cornell_box_scale
       ),
       std::make_tuple(
-         std::string(sample_directory_path + "/CornellBox/right_sphere.obj"),
+         std::string(sample_directory_path + "/CornellBox/right_sphere.obj"), ObjectGL::TYPE::SPHERE,
          glm::vec4(1.0f), cornell_box_scale
       ),
       std::make_tuple(
-         std::string(sample_directory_path + "/CornellBox/water.obj"),
+         std::string(sample_directory_path + "/CornellBox/water.obj"), ObjectGL::TYPE::ARBITRARY,
          glm::vec4(1.0f), cornell_box_scale
       )
    };
@@ -417,6 +417,7 @@ void RendererGL::play()
    setShaders();
    //buildKdtree();
 
+   glfwShowWindow( Window );
    while (!glfwWindowShouldClose( Window )) {
       if (!Pause) render();
 
