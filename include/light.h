@@ -8,6 +8,14 @@ public:
    LightGL();
    ~LightGL() = default;
 
+   struct AreaLight
+   {
+      alignas(4) float Area;
+      alignas(16) glm::vec3 Emission;
+      alignas(16) glm::vec3 Normal;
+      alignas(16) glm::vec3 Vertices[4];
+   };
+
    [[nodiscard]] bool isLightOn() const;
    void toggleLightSwitch();
    void addLight(

@@ -1,0 +1,95 @@
+#version 460
+
+layout (local_size_x = 512, local_size_y = 1, local_size_z = 1) in;
+
+struct Photon
+{
+   vec3 Power;
+   vec3 Position;
+   vec3 IncomingDirection;
+};
+
+struct AreaLight
+{
+   float Area;
+   vec3 Emission;
+   vec3 Normal;
+   vec3 Vertices[4];
+};
+
+struct Object
+{
+
+};
+
+layout (binding = 0, std430) buffer Photons { Photon photons[]; };
+layout (binding = 1, std430) buffer Lights { AreaLight lights[]; };
+layout (binding = 2, std430) buffer Coordinates { float coordinates[]; };
+
+uniform uint Seed;
+uniform int MaxGlobalPhotonNum;
+uniform int MaxDepth;
+
+const float zero = 0.0f;
+const float one = 1.0f;
+const float two_pi = 6.28318530717958647692528676655900576f;
+const float one_over_pi = 0.318309886183790671537767526745028724f;
+
+float getRandomFloat(inout uint seed)
+{
+   seed = (seed ^ 61u) ^ (seed >> 16u);
+   seed *= 9u;
+   seed = seed ^ (seed >> 4u);
+   seed *= 0x27d4eb2du;
+   seed = seed ^ (seed >> 15u);
+   return float(seed) / 4294967296.0f;
+}
+
+vec3 getRandomPointInUnitSphere(inout float pdf, inout uint seed)
+{
+   float phi = two_pi * getRandomFloat( seed );
+   float theta = acos( 2.0f * getRandomFloat( seed ) - one ) * 0.5f;
+   float cos_theta = cos( theta );
+   pdf *= cos_theta * one_over_pi;
+   return vec3(cos( phi ) * sin( theta ), cos_theta, sin( phi ) * sin( theta ));
+}
+
+vec3 getSampleRayFromLight(inout vec3 ray_origin, inout vec3 ray_direction)
+{
+   // Currently, the number of lights is 1.
+   uint seed = (gl_GlobalInvocationID.x * 1973u + Seed * 9277u) | 1u;
+   vec3 v0 = lights[0].Vertices[0];
+   vec3 v1 = lights[0].Vertices[2];
+   vec3 v3 = getRandomFloat( seed ) > 0.5f ? lights[0].Vertices[1] : lights[0].Vertices[3];
+   float a = getRandomFloat( seed );
+   float b = getRandomFloat( seed );
+   ray_origin = (one - (a + b)) * v0 + a * v1 + b * v2;
+   vec3 normal = lights[0].Normal;
+   vec3 du = abs( normal.y ) < 0.9f ?
+      normalize( cross( normal, vec3(zero, one, zero) ) ) : normalize( cross( normal, vec3(zero, zero, -one) ) );
+   vec3 dv = normalize( cross( du, normal ) );
+   float pdf = one / lights[0].Area;
+   ray_direction = mat3(du, normal, dv) * getRandomPointInUnitSphere( pdf, seed );
+   return lights[0].Emission / pdf * abs( dot( ray_direction, normal ) );
+}
+
+bool findIntersection()
+{
+
+}
+
+void main()
+{
+   int index = int(gl_GlobalInvocationID.x);
+   int generated_sample_num = 0;
+   while (index < MaxGlobalPhotonNum) {
+      vec3 ray_origin, ray_direction;
+      vec3 power = getSampleRayFromLight( ray_origin, ray_direction );
+      for (int i = 0; i < MaxDepth; ++i) {
+         if (any( lessThan( power, vec3(zero) ) )) break;
+         if (!findIntersection()) break;
+
+
+      }
+   }
+}

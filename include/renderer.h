@@ -10,6 +10,7 @@
 #include "light.h"
 #include "photon_map.h"
 #include "kdtree_shader.h"
+#include "photon_map_shader.h"
 
 class RendererGL final
 {
@@ -76,6 +77,15 @@ private:
          {}
    };
 
+   struct PhotonMapBuild
+   {
+      std::unique_ptr<BuildPhotonMapShaderGL> BuildPhotonMap;
+
+      PhotonMapBuild() :
+         BuildPhotonMap( std::make_unique<BuildPhotonMapShaderGL>() )
+      {}
+   };
+
    inline static RendererGL* Renderer = nullptr;
 
    GLFWwindow* Window;
@@ -97,6 +107,7 @@ private:
    std::vector<glm::mat4> LightViewMatrices;
    std::vector<glm::mat4> LightViewProjectionMatrices;
    KdtreeBuild KdtreeBuilder;
+   PhotonMapBuild PhotonMapBuilder;
 
    [[nodiscard]] static constexpr int divideUp(int a, int b) { return (a + b - 1) / b; }
 
@@ -130,4 +141,8 @@ private:
    void buildKdtree() const;
    //void search();
    //void findNearestNeighbors();
+
+   // renderer_photon.cpp
+   void setPhotonMapShaders() const;
+   void createPhotonMap();
 };

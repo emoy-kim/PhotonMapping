@@ -15,9 +15,11 @@ set(
 		source/kdtree_object.cpp
 		source/shader.cpp
 		source/kdtree_shader.cpp
+		source/photon_map_shader.cpp
+		source/photon_map.cpp
 		source/renderer.cpp
 		source/renderer_kdtree.cpp
-		source/photon_map.cpp
+		source/renderer_photon.cpp
 )
 
 configure_file(include/project_constants.h.in ${PROJECT_BINARY_DIR}/project_constants.h @ONLY)

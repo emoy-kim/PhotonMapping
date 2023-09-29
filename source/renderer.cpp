@@ -5,7 +5,7 @@ RendererGL::RendererGL() :
    ShadowMapSize( 1024 ), DepthFBO( 0 ), DepthTextureArrayID( 0 ), ClickedPoint( -1, -1 ), ActiveCamera( nullptr ),
    MainCamera( std::make_unique<CameraGL>() ), PCFSceneShader( std::make_unique<ShaderGL>() ),
    LightViewDepthShader( std::make_unique<ShaderGL>() ), Lights( std::make_unique<LightGL>() ),
-   PhotonMap( std::make_unique<PhotonMapGL>() ), KdtreeBuilder()
+   PhotonMap( std::make_unique<PhotonMapGL>() ), KdtreeBuilder(), PhotonMapBuilder()
 {
    Renderer = this;
 
@@ -21,12 +21,28 @@ RendererGL::~RendererGL()
 
 void RendererGL::printOpenGLInformation()
 {
-   std::cout << "****************************************************************\n";
+   std::cout << "**********************************************************************************\n";
    std::cout << " - GLFW version supported: " << glfwGetVersionString() << "\n";
    std::cout << " - OpenGL renderer: " << glGetString( GL_RENDERER ) << "\n";
    std::cout << " - OpenGL version supported: " << glGetString( GL_VERSION ) << "\n";
    std::cout << " - OpenGL shader version supported: " << glGetString( GL_SHADING_LANGUAGE_VERSION ) << "\n";
-   std::cout << "****************************************************************\n\n";
+
+   int work_group_count = 0;
+   glGetIntegeri_v( GL_MAX_COMPUTE_WORK_GROUP_COUNT, 0, &work_group_count );
+   std::cout << " - OpenGL maximum number of work groups: " <<  work_group_count << ", ";
+   glGetIntegeri_v( GL_MAX_COMPUTE_WORK_GROUP_COUNT, 1, &work_group_count );
+   std::cout << work_group_count << ", ";
+   glGetIntegeri_v( GL_MAX_COMPUTE_WORK_GROUP_COUNT, 2, &work_group_count );
+   std::cout << work_group_count << "\n";
+
+   int work_group_size = 0;
+   glGetIntegeri_v( GL_MAX_COMPUTE_WORK_GROUP_SIZE, 0, &work_group_size );
+   std::cout << " - OpenGL maximum work group size: " <<  work_group_size << ", ";
+   glGetIntegeri_v( GL_MAX_COMPUTE_WORK_GROUP_SIZE, 1, &work_group_size );
+   std::cout << work_group_size << ", ";
+   glGetIntegeri_v( GL_MAX_COMPUTE_WORK_GROUP_SIZE, 2, &work_group_size );
+   std::cout << work_group_size << "\n";
+   std::cout << "**********************************************************************************\n\n";
 }
 
 void RendererGL::initialize()
@@ -333,6 +349,7 @@ void RendererGL::setShaders() const
    PCFSceneShader->setSceneUniformLocations( Lights->getTotalLightNum() );
 
    setKdtreeShaders();
+   setPhotonMapShaders();
 }
 
 void RendererGL::drawObjects(ShaderGL* shader, CameraGL* camera) const
@@ -404,6 +421,7 @@ void RendererGL::play()
    setObjects();
    setLights();
    setShaders();
+   createPhotonMap();
    //buildKdtree();
 
    glfwShowWindow( Window );

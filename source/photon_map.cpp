@@ -20,6 +20,11 @@ void PhotonMapGL::setObjects(const std::vector<object_t>& objects)
    }
 }
 
+void PhotonMapGL::prepareBuilding()
+{
+
+}
+
 #if 0
 PhotonMap::PhotonMap(int max_photons) :
    MaxPhotons( max_photons ), StoredPhotonNum( 0 ), HalfStoredPhotons( 0 ), PreviousScale( 1 ), MinBoundingBox( 1e-8f ),

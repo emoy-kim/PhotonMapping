@@ -8,24 +8,25 @@ using object_t = std::tuple<std::string, ObjectGL::TYPE, glm::vec4, glm::mat4>;
 class PhotonMapGL final
 {
 public:
-   inline static constexpr int SampleNum = 256;
-   inline static constexpr int MaxDepth = 100;
-   inline static constexpr int MaxGlobalPhotonNum = 1'000'000;
+   static constexpr int ThreadBlockNum = 128;
+   static constexpr int SampleNum = 256;
+   static constexpr int MaxDepth = 64;
+   static constexpr int MaxGlobalPhotonNum = 1'048'576;
 
    struct Photon
    {
-      glm::vec3 Power;
-      glm::vec3 Position;
-      glm::vec2 IncomingDirection;
-      int KDTreeSplittingPlane;
+      alignas(16) glm::vec3 Power;
+      alignas(16) glm::vec3 Position;
+      alignas(8) glm::vec2 IncomingDirection;
 
-      Photon() : Power(), Position(), IncomingDirection(), KDTreeSplittingPlane( -1 ) {}
+      Photon() : Power(), Position(), IncomingDirection() {}
    };
 
    PhotonMapGL() = default;
    ~PhotonMapGL() = default;
 
    void setObjects(const std::vector<object_t>& objects);
+   void prepareBuilding();
    [[nodiscard]] const std::vector<glm::mat4>& getWorldMatrices() const { return ToWorlds; }
    [[nodiscard]] const std::vector<std::shared_ptr<ObjectGL>>& getObjects() const { return Objects; }
 
