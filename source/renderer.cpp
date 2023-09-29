@@ -119,10 +119,6 @@ void RendererGL::keyboard(GLFWwindow* window, int key, int scancode, int action,
          Renderer->ActiveCamera = Renderer->LightCameras[0].get();
          std::cout << ">> Light-1 Selected\n";
          break;
-      case GLFW_KEY_2:
-         Renderer->ActiveCamera = Renderer->LightCameras[1].get();
-         std::cout << ">> Light-2 Selected\n";
-         break;
       case GLFW_KEY_C:
          Renderer->writeFrame();
          std::cout << ">> Framebuffer Captured\n";
@@ -206,7 +202,7 @@ void RendererGL::setObjects()
    const glm::mat4 cornell_box_scale = glm::scale( glm::mat4(1.0f), glm::vec3(300.0f) );
    const std::string sample_directory_path = std::string(CMAKE_SOURCE_DIR) + "/samples";
    const std::vector<object_t> objects = {
-      std::make_tuple(
+      /*std::make_tuple(
          std::string(sample_directory_path + "/Tiger/tiger.obj"), ObjectGL::TYPE::ARBITRARY,
          glm::vec4(1.0f),
          glm::translate( glm::mat4(1.0f), glm::vec3(200.0f, 0.0f, 0.0f) ) * to_tiger_object
@@ -226,7 +222,7 @@ void RendererGL::setObjects()
          glm::vec4(1.0f),
          glm::translate( glm::mat4(1.0f), glm::vec3(50.0f, 30.0f, 200.0f) ) *
          glm::rotate( glm::mat4(1.0f), glm::radians( -30.0f ), glm::vec3(1.0f, 0.0f, 0.0f) ) * to_tiger_object
-      ),
+      ),*/
       std::make_tuple(
          std::string(sample_directory_path + "/CornellBox/floor.obj"), ObjectGL::TYPE::PLANE,
          glm::vec4(1.0f), cornell_box_scale
@@ -286,28 +282,21 @@ void RendererGL::setLightViewFrameBuffers()
 
 void RendererGL::setLights()
 {
-   glm::vec4 light_position(0.0f, 500.0f, 500.0f, 1.0f);
-   glm::vec4 ambient_color(0.1f, 0.1f, 0.1f, 1.0f);
-   glm::vec4 diffuse_color(0.7f, 0.7f, 0.7f, 1.0f);
-   glm::vec4 specular_color(0.7f, 0.7f, 0.7f, 1.0f);
-   const glm::vec3 reference_position(0.0f, 150.0f, 0.0f);
+   glm::vec4 light_position(0.0f, 477.0f, 0.0f, 1.0f);
+   glm::vec4 ambient_color(0.78f, 0.78f, 0.78f, 1.0f);
+   glm::vec4 diffuse_color(0.78f, 0.78f, 0.78f, 1.0f);
+   glm::vec4 specular_color(0.0f, 0.0f, 0.0f, 1.0f);
+   const glm::vec3 reference_position(0.0f, 0.0f, 0.0f);
    Lights->addLight(
       light_position, ambient_color, diffuse_color, specular_color,
       reference_position - glm::vec3(light_position),
-      25.0f,
+      180.0f,
       0.5f,
       1000.0f
    );
 
-   light_position = glm::vec4(0.0f, 0.0f, 500.0f, 1.0f);
-   ambient_color = glm::vec4(0.2f, 0.2f, 0.2f, 1.0f);
-   diffuse_color = glm::vec4(0.5f, 0.5f, 0.5f, 1.0f);
-   specular_color = glm::vec4(0.5f, 0.5f, 0.5f, 1.0f);
-   Lights->addLight( light_position, ambient_color, diffuse_color, specular_color );
-
    const std::vector<glm::vec3> reference_points = {
-      glm::vec3(Lights->getLightPosition( 0 )) + Lights->getSpotlightDirection( 0 ),
-      glm::vec3(0.0f)
+      glm::vec3(Lights->getLightPosition( 0 )) + Lights->getSpotlightDirection( 0 )
    };
 
    const int light_num = Lights->getTotalLightNum();
