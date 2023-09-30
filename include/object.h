@@ -13,7 +13,7 @@ struct Rect
 class ObjectGL
 {
 public:
-   enum class TYPE { ARBITRARY = 0, PLANE, SPHERE, BOX  };
+   enum class TYPE { ARBITRARY = 0, PLANE, SPHERE, BOX, LIGHT  };
 
    enum class MATERIAL_TYPE { LAMBERT = 0, MIRROR, GLASS };
 
@@ -22,11 +22,6 @@ public:
    ObjectGL();
    virtual ~ObjectGL();
 
-   void setObjectType(const TYPE& type) { Type = type; }
-   void setDiffuseReflectionColor(const glm::vec4& diffuse_reflection_color)
-   {
-      DiffuseReflectionColor = diffuse_reflection_color;
-   }
    void setObject(
       GLenum draw_mode,
       const std::vector<glm::vec3>& vertices,
@@ -41,11 +36,22 @@ public:
       const std::string& texture_file_path,
       bool is_grayscale = false
    );
-   virtual void setObject(GLenum draw_mode, const std::string& obj_file_path);
-   void setMaterial(const std::string& mtl_file_path);
+   virtual void setObject(
+      GLenum draw_mode,
+      const TYPE& type,
+      const std::string& obj_file_path,
+      const std::string& mtl_file_path
+   );
+   virtual void setObjectWithTransform(
+      GLenum draw_mode,
+      const TYPE& type,
+      const glm::mat4& transform,
+      const std::string& obj_file_path,
+      const std::string& mtl_file_path
+   );
    int addTexture(const std::string& texture_file_path, bool is_grayscale = false);
    void addTexture(int width, int height, bool is_grayscale = false);
-   void transferUniformsToShader(const ShaderGL* shader) const;
+   virtual void transferUniformsToShader(const ShaderGL* shader) const;
    void releaseCustomBuffer(const std::string& name)
    {
       const auto it = CustomBuffers.find( name );
@@ -54,6 +60,7 @@ public:
          CustomBuffers.erase( it );
       }
    }
+   [[nodiscard]] bool isLight() const { return Type == TYPE::LIGHT; }
    [[nodiscard]] int getObjectType() const { return static_cast<int>(Type); }
    [[nodiscard]] GLuint getVAO() const { return VAO; }
    [[nodiscard]] GLuint getVBO() const { return VBO; }
@@ -111,6 +118,7 @@ protected:
       std::vector<glm::vec2>& textures,
       const std::string& file_path
    );
+   void setMaterial(const std::string& mtl_file_path);
    [[nodiscard]] static bool isNumber(const std::string& n)
    {
       return !n.empty() && std::find_if_not( n.begin(), n.end(), [](auto c) { return std::isdigit( c ); } ) == n.end();

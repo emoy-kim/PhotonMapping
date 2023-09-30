@@ -25,7 +25,12 @@ public:
    KdtreeGL();
    ~KdtreeGL() override = default;
 
-   void setObject(GLenum draw_mode, const std::string& obj_file_path) override;
+   void setObject(
+      GLenum draw_mode,
+      const TYPE& type,
+      const std::string& obj_file_path,
+      const std::string& mtl_file_path
+   ) override;
    void initialize();
    void prepareSorting();
    void releaseSorting();

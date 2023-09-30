@@ -254,40 +254,6 @@ void ObjectGL::readObjectFile(
    BoundingBox.MaxPoint = max_point;
 }
 
-void ObjectGL::setObject(GLenum draw_mode, const std::string& obj_file_path)
-{
-   DrawMode = draw_mode;
-   std::vector<glm::vec3> vertices, normals;
-   std::vector<glm::vec2> textures;
-   readObjectFile( vertices, normals, textures, obj_file_path );
-
-   const bool normals_exist = !normals.empty();
-   const bool textures_exist = !textures.empty();
-   for (uint i = 0; i < vertices.size(); ++i) {
-      DataBuffer.push_back( vertices[i].x );
-      DataBuffer.push_back( vertices[i].y );
-      DataBuffer.push_back( vertices[i].z );
-      if (normals_exist) {
-         DataBuffer.push_back( normals[i].x );
-         DataBuffer.push_back( normals[i].y );
-         DataBuffer.push_back( normals[i].z );
-      }
-      if (textures_exist) {
-         DataBuffer.push_back( textures[i].x );
-         DataBuffer.push_back( textures[i].y );
-      }
-      VerticesCount++;
-   }
-   int n = 3;
-   if (normals_exist) n += 3;
-   if (textures_exist) n += 2;
-   const auto n_bytes_per_vertex = static_cast<int>(n * sizeof( GLfloat ));
-   prepareVertexBuffer( n_bytes_per_vertex );
-   if (normals_exist) prepareNormal();
-   if (textures_exist) prepareTexture( normals_exist );
-   prepareIndexBuffer();
-}
-
 void ObjectGL::setMaterial(const std::string& mtl_file_path)
 {
    std::ifstream file(mtl_file_path);
@@ -333,6 +299,94 @@ void ObjectGL::setMaterial(const std::string& mtl_file_path)
          }
       }
    }
+}
+
+void ObjectGL::setObject(
+   GLenum draw_mode,
+   const TYPE& type,
+   const std::string& obj_file_path,
+   const std::string& mtl_file_path
+)
+{
+   Type = type;
+   DrawMode = draw_mode;
+   std::vector<glm::vec3> vertices, normals;
+   std::vector<glm::vec2> textures;
+   readObjectFile( vertices, normals, textures, obj_file_path );
+
+   const bool normals_exist = !normals.empty();
+   const bool textures_exist = !textures.empty();
+   for (uint i = 0; i < vertices.size(); ++i) {
+      DataBuffer.push_back( vertices[i].x );
+      DataBuffer.push_back( vertices[i].y );
+      DataBuffer.push_back( vertices[i].z );
+      if (normals_exist) {
+         DataBuffer.push_back( normals[i].x );
+         DataBuffer.push_back( normals[i].y );
+         DataBuffer.push_back( normals[i].z );
+      }
+      if (textures_exist) {
+         DataBuffer.push_back( textures[i].x );
+         DataBuffer.push_back( textures[i].y );
+      }
+      VerticesCount++;
+   }
+   int n = 3;
+   if (normals_exist) n += 3;
+   if (textures_exist) n += 2;
+   const auto n_bytes_per_vertex = static_cast<int>(n * sizeof( GLfloat ));
+   prepareVertexBuffer( n_bytes_per_vertex );
+   if (normals_exist) prepareNormal();
+   if (textures_exist) prepareTexture( normals_exist );
+   prepareIndexBuffer();
+
+   if (!mtl_file_path.empty()) setMaterial( mtl_file_path );
+}
+
+void ObjectGL::setObjectWithTransform(
+   GLenum draw_mode,
+   const TYPE& type,
+   const glm::mat4& transform,
+   const std::string& obj_file_path,
+   const std::string& mtl_file_path
+)
+{
+   Type = type;
+   DrawMode = draw_mode;
+   std::vector<glm::vec3> vertices, normals;
+   std::vector<glm::vec2> textures;
+   readObjectFile( vertices, normals, textures, obj_file_path );
+
+   const bool normals_exist = !normals.empty();
+   const bool textures_exist = !textures.empty();
+   const glm::mat4 vector_transform = glm::transpose( glm::inverse( transform ) );
+   for (uint i = 0; i < vertices.size(); ++i) {
+      const glm::vec3 p = glm::vec3(transform * glm::vec4(vertices[i], 1.0f));
+      DataBuffer.push_back( p.x );
+      DataBuffer.push_back( p.y );
+      DataBuffer.push_back( p.z );
+      if (normals_exist) {
+         const glm::vec3 n = glm::vec3(vector_transform * glm::vec4(normals[i], 0.0f));
+         DataBuffer.push_back( n.x );
+         DataBuffer.push_back( n.y );
+         DataBuffer.push_back( n.z );
+      }
+      if (textures_exist) {
+         DataBuffer.push_back( textures[i].x );
+         DataBuffer.push_back( textures[i].y );
+      }
+      VerticesCount++;
+   }
+   int n = 3;
+   if (normals_exist) n += 3;
+   if (textures_exist) n += 2;
+   const auto n_bytes_per_vertex = static_cast<int>(n * sizeof( GLfloat ));
+   prepareVertexBuffer( n_bytes_per_vertex );
+   if (normals_exist) prepareNormal();
+   if (textures_exist) prepareTexture( normals_exist );
+   prepareIndexBuffer();
+
+   if (!mtl_file_path.empty()) setMaterial( mtl_file_path );
 }
 
 void ObjectGL::transferUniformsToShader(const ShaderGL* shader) const

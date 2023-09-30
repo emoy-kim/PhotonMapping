@@ -1,15 +1,22 @@
 #include "kdtree_object.h"
 
 KdtreeGL::KdtreeGL() :
-   Dim( 3 ), UniqueNum( 0 ), RootNode( -1 ), NodeNum( 0 ), Sort(), Root( 0 ), Coordinates( 0 ), LeftChildNumInWarp( 0 ),
-   RightChildNumInWarp( 0 ), NodeSums( 0 ), MidReferences{ 0, 0 }, Reference( Dim + 2, 0 ), Buffer( Dim + 2, 0 )
+   ObjectGL(), Dim( 3 ), UniqueNum( 0 ), RootNode( -1 ), NodeNum( 0 ), Sort(), Root( 0 ), Coordinates( 0 ),
+   LeftChildNumInWarp( 0 ), RightChildNumInWarp( 0 ), NodeSums( 0 ), MidReferences{ 0, 0 }, Reference( Dim + 2, 0 ),
+   Buffer( Dim + 2, 0 )
 {
 }
 
-void KdtreeGL::setObject(GLenum draw_mode, const std::string& obj_file_path)
+void KdtreeGL::setObject(
+   GLenum draw_mode,
+   const TYPE& type,
+   const std::string& obj_file_path,
+   const std::string& mtl_file_path
+)
 {
-   Vertices.clear();
+   Type = type;
    DrawMode = draw_mode;
+   Vertices.clear();
    std::vector<glm::vec3> normals;
    std::vector<glm::vec2> textures;
    readObjectFile( Vertices, normals, textures, obj_file_path );
@@ -39,6 +46,8 @@ void KdtreeGL::setObject(GLenum draw_mode, const std::string& obj_file_path)
    if (normals_exist) prepareNormal();
    if (textures_exist) prepareTexture( normals_exist );
    prepareIndexBuffer();
+
+   if (!mtl_file_path.empty()) setMaterial( mtl_file_path );
 }
 
 void KdtreeGL::initialize()
