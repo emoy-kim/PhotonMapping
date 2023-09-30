@@ -1,9 +1,13 @@
 #pragma once
 
+#include "light.h"
 #include "kdtree_object.h"
 
-// <file path, type, color, world matrix>
-using object_t = std::tuple<std::string, ObjectGL::TYPE, glm::vec4, glm::mat4>;
+// <obj file path, mtl file path, type, color, world matrix>
+using object_t = std::tuple<std::string, std::string, ObjectGL::TYPE, glm::vec4, glm::mat4>;
+
+// <obj file path, mtl file path, world matrix>
+using light_t = std::tuple<std::string, std::string, glm::mat4>;
 
 class PhotonMapGL final
 {
@@ -26,6 +30,7 @@ public:
    ~PhotonMapGL() = default;
 
    void setObjects(const std::vector<object_t>& objects);
+   void setLights(const std::vector<light_t>& lights);
    void prepareBuilding();
    [[nodiscard]] const std::vector<glm::mat4>& getWorldMatrices() const { return ToWorlds; }
    [[nodiscard]] const std::vector<std::shared_ptr<ObjectGL>>& getObjects() const { return Objects; }
@@ -36,7 +41,22 @@ private:
    std::vector<std::shared_ptr<ObjectGL>> Objects;
    std::vector<glm::mat4> ToWorlds;
    std::vector<Rect> WorldBounds;
+   std::shared_ptr<LightGL> Lights;
 
+   [[nodiscard]] static bool isNumber(const std::string& n)
+   {
+      return !n.empty() && std::find_if_not( n.begin(), n.end(), [](auto c) { return std::isdigit( c ); } ) == n.end();
+   }
+   static void separateObjectFile(
+      const std::string& file_path,
+      const std::string& out_file_root_path,
+      const std::string& separator
+   );
+   static void separateMaterialFile(
+      const std::string& file_path,
+      const std::string& out_file_root_path,
+      const std::string& separator
+   );
 };
 
 #if 0

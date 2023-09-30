@@ -1,5 +1,96 @@
 #include "photon_map.h"
 
+void PhotonMapGL::separateObjectFile(
+   const std::string& file_path,
+   const std::string& out_file_root_path,
+   const std::string& separator
+)
+{
+   std::ifstream file(file_path);
+
+   assert( file.is_open() );
+
+   std::ofstream obj;
+   int file_index = 0;
+   int v = 0, t = 0, n = 0;
+   int next_v = 0, next_t = 0, next_n = 0;
+   while (!file.eof()) {
+      std::string line;
+      std::getline( file, line );
+
+      const std::regex space_delimiter("[ ]");
+      const std::sregex_token_iterator line_it(line.begin(), line.end(), space_delimiter, -1);
+      const std::vector<std::string> parsed(line_it, std::sregex_token_iterator());
+      if (parsed.empty()) continue;
+
+      if (parsed[0] == separator) {
+         if (obj.is_open()) obj.close();
+         v = next_v;
+         t = next_t;
+         n = next_n;
+         file_index++;
+         obj.open( out_file_root_path + std::to_string( file_index ) + ".obj", std::ofstream::out );
+      }
+      else if (parsed[0] == "f") {
+         std::string out = "f ";
+         for (int i = 1; i <= 3; ++i) {
+            const std::regex delimiter("[/\r\n]");
+            const std::sregex_token_iterator it(parsed[i].begin(), parsed[i].end(), delimiter, -1);
+            const std::vector<std::string> vtn(it, std::sregex_token_iterator());
+            out += std::to_string( std::stoi( vtn[0] ) - v ) + "/";
+            if (isNumber( vtn[1] )) out += std::to_string( std::stoi( vtn[1] ) - t ) + "/";
+            else out += "/";
+            if (isNumber( vtn[2] )) out += std::to_string( std::stoi( vtn[2] ) - n );
+            out += " ";
+         }
+         obj << out << "\n";
+      }
+      else if (parsed[0] == "v") {
+         next_v++;
+         obj << line + "\n";
+      }
+      else if (parsed[0] == "vt") {
+         next_t++;
+         obj << line + "\n";
+      }
+      else if (parsed[0] == "vn") {
+         next_n++;
+         obj << line + "\n";
+      }
+      else obj << line + "\n";
+   }
+}
+
+void PhotonMapGL::separateMaterialFile(
+   const std::string& file_path,
+   const std::string& out_file_root_path,
+   const std::string& separator
+)
+{
+   std::ifstream file(file_path);
+
+   assert( file.is_open() );
+
+   std::ofstream mtl;
+   int file_index = 0;
+   while (!file.eof()) {
+      std::string line;
+      std::getline( file, line );
+
+      const std::regex space_delimiter("[ ]");
+      const std::sregex_token_iterator line_it(line.begin(), line.end(), space_delimiter, -1);
+      const std::vector<std::string> parsed(line_it, std::sregex_token_iterator());
+      if (parsed.empty()) continue;
+
+      if (parsed[0] == separator) {
+         if (mtl.is_open()) mtl.close();
+         file_index++;
+         mtl.open( out_file_root_path + std::to_string( file_index ) + ".mtl", std::ofstream::out );
+      }
+      mtl << line + "\n";
+   }
+}
+
 void PhotonMapGL::setObjects(const std::vector<object_t>& objects)
 {
    Objects.clear();
@@ -11,13 +102,19 @@ void PhotonMapGL::setObjects(const std::vector<object_t>& objects)
    for (size_t i = 0; i < objects.size(); ++i) {
       Objects[i] = std::make_shared<ObjectGL>();
       Objects[i]->setObject( GL_TRIANGLES, std::get<0>( objects[i] ) );
-      Objects[i]->setObjectType( std::get<1>( objects[i] ) );
-      Objects[i]->setDiffuseReflectionColor( std::get<2>( objects[i] ) );
-      ToWorlds[i] = std::get<3>( objects[i] );
+      Objects[i]->setMaterial( std::get<1>( objects[i] ) );
+      Objects[i]->setObjectType( std::get<2>( objects[i] ) );
+      Objects[i]->setDiffuseReflectionColor( std::get<3>( objects[i] ) );
+      ToWorlds[i] = std::get<4>( objects[i] );
       WorldBounds[i] = Objects[i]->getBoundingBox();
       WorldBounds[i].MinPoint = glm::vec3(ToWorlds[i] * glm::vec4(WorldBounds[i].MinPoint, 1.0f));
       WorldBounds[i].MaxPoint = glm::vec3(ToWorlds[i] * glm::vec4(WorldBounds[i].MaxPoint, 1.0f));
    }
+}
+
+void PhotonMapGL::setLights(const std::vector<light_t>& lights)
+{
+
 }
 
 void PhotonMapGL::prepareBuilding()
