@@ -12,7 +12,7 @@ void KdtreeGL::setObject(GLenum draw_mode, const std::string& obj_file_path)
    DrawMode = draw_mode;
    std::vector<glm::vec3> normals;
    std::vector<glm::vec2> textures;
-   if (!readObjectFile( Vertices, normals, textures, obj_file_path )) return;
+   readObjectFile( Vertices, normals, textures, obj_file_path );
 
    const bool normals_exist = !normals.empty();
    const bool textures_exist = !textures.empty();
