@@ -1,10 +1,10 @@
 #include "object.h"
 
 ObjectGL::ObjectGL() :
-   Type( TYPE::ARBITRARY ), VAO( 0 ), VBO( 0 ), IBO( 0 ), DrawMode( 0 ), VerticesCount( 0 ), BoundingBox(),
-   EmissionColor( 0.1f, 0.1f, 0.1f, 1.0f ), AmbientReflectionColor( 0.2f, 0.2f, 0.2f, 1.0f ),
-   DiffuseReflectionColor( 0.8f, 0.8f, 0.8f, 1.0f ), SpecularReflectionColor( 0.8f, 0.8f, 0.8f, 1.0f ),
-   SpecularReflectionExponent( 16.0f )
+   Type( TYPE::ARBITRARY ), MaterialType( MATERIAL_TYPE::LAMBERT ), VAO( 0 ), VBO( 0 ), IBO( 0 ), DrawMode( 0 ),
+   VerticesCount( 0 ), BoundingBox(), EmissionColor( 0.1f, 0.1f, 0.1f, 1.0f ),
+   AmbientReflectionColor( 0.2f, 0.2f, 0.2f, 1.0f ), DiffuseReflectionColor( 0.8f, 0.8f, 0.8f, 1.0f ),
+   SpecularReflectionColor( 0.8f, 0.8f, 0.8f, 1.0f ), SpecularReflectionExponent( 16.0f ), RefractiveIndex( 1.0f )
 {
 }
 
@@ -19,31 +19,6 @@ ObjectGL::~ObjectGL()
    for (const auto& buffer : CustomBuffers) {
       if (buffer.second != 0) glDeleteBuffers( 1, &buffer.second );
    }
-}
-
-void ObjectGL::setEmissionColor(const glm::vec4& emission_color)
-{
-   EmissionColor = emission_color;
-}
-
-void ObjectGL::setAmbientReflectionColor(const glm::vec4& ambient_reflection_color)
-{
-   AmbientReflectionColor = ambient_reflection_color;
-}
-
-void ObjectGL::setDiffuseReflectionColor(const glm::vec4& diffuse_reflection_color)
-{
-   DiffuseReflectionColor = diffuse_reflection_color;
-}
-
-void ObjectGL::setSpecularReflectionColor(const glm::vec4& specular_reflection_color)
-{
-   SpecularReflectionColor = specular_reflection_color;
-}
-
-void ObjectGL::setSpecularReflectionExponent(const float& specular_reflection_exponent)
-{
-   SpecularReflectionExponent = specular_reflection_exponent;
 }
 
 bool ObjectGL::prepareTexture2DUsingFreeImage(const std::string& file_path, bool is_grayscale) const
@@ -208,70 +183,7 @@ void ObjectGL::findNormals(
    for (auto& n : normals) n = glm::normalize( n );
 }
 
-void ObjectGL::separateObjectFile(
-   const std::string& file_path,
-   const std::string& out_file_root_path,
-   const std::string& separator
-)
-{
-   std::ifstream file(file_path);
-   if (!file.is_open()) {
-      std::cout << "The object file is not correct.\n";
-      return;
-   }
-
-   std::ofstream obj;
-   int file_index = 0;
-   int v = 0, t = 0, n = 0;
-   int next_v = 0, next_t = 0, next_n = 0;
-   while (!file.eof()) {
-      std::string line;
-      std::getline( file, line );
-
-      const std::regex space_delimiter("[ ]");
-      const std::sregex_token_iterator line_it(line.begin(), line.end(), space_delimiter, -1);
-      const std::vector<std::string> parsed(line_it, std::sregex_token_iterator());
-      if (parsed.empty()) continue;
-
-      if (parsed[0] == separator) {
-         if (obj.is_open()) obj.close();
-         v = next_v;
-         t = next_t;
-         n = next_n;
-         file_index++;
-         obj.open( out_file_root_path + std::to_string( file_index ) + ".obj", std::ofstream::out);
-      }
-      else if (parsed[0] == "f") {
-         std::string out = "f ";
-         for (int i = 1; i <= 3; ++i) {
-            const std::regex delimiter("[/\r\n]");
-            const std::sregex_token_iterator it(parsed[i].begin(), parsed[i].end(), delimiter, -1);
-            const std::vector<std::string> vtn(it, std::sregex_token_iterator());
-            out += std::to_string( std::stoi( vtn[0] ) - v ) + "/";
-            if (isNumber( vtn[1] )) out += std::to_string( std::stoi( vtn[1] ) - t ) + "/";
-            else out += "/";
-            if (isNumber( vtn[2] )) out += std::to_string( std::stoi( vtn[2] ) - n );
-            out += " ";
-         }
-         obj << out << "\n";
-      }
-      else if (parsed[0] == "v") {
-         next_v++;
-         obj << line + "\n";
-      }
-      else if (parsed[0] == "vt") {
-         next_t++;
-         obj << line + "\n";
-      }
-      else if (parsed[0] == "vn") {
-         next_n++;
-         obj << line + "\n";
-      }
-      else obj << line + "\n";
-   }
-}
-
-bool ObjectGL::readObjectFile(
+void ObjectGL::readObjectFile(
    std::vector<glm::vec3>& vertices,
    std::vector<glm::vec3>& normals,
    std::vector<glm::vec2>& textures,
@@ -279,10 +191,8 @@ bool ObjectGL::readObjectFile(
 )
 {
    std::ifstream file(file_path);
-   if (!file.is_open()) {
-      std::cout << "The object file is not correct.\n";
-      return false;
-   }
+
+   assert( file.is_open() );
 
    bool found_normals = false, found_textures = false;
    std::vector<glm::vec3> vertex_buffer, normal_buffer;
@@ -342,7 +252,6 @@ bool ObjectGL::readObjectFile(
    IndexBuffer = std::move( vertex_indices );
    BoundingBox.MinPoint = min_point;
    BoundingBox.MaxPoint = max_point;
-   return true;
 }
 
 void ObjectGL::setObject(GLenum draw_mode, const std::string& obj_file_path)
@@ -350,7 +259,7 @@ void ObjectGL::setObject(GLenum draw_mode, const std::string& obj_file_path)
    DrawMode = draw_mode;
    std::vector<glm::vec3> vertices, normals;
    std::vector<glm::vec2> textures;
-   if (!readObjectFile( vertices, normals, textures, obj_file_path )) return;
+   readObjectFile( vertices, normals, textures, obj_file_path );
 
    const bool normals_exist = !normals.empty();
    const bool textures_exist = !textures.empty();
@@ -377,6 +286,53 @@ void ObjectGL::setObject(GLenum draw_mode, const std::string& obj_file_path)
    if (normals_exist) prepareNormal();
    if (textures_exist) prepareTexture( normals_exist );
    prepareIndexBuffer();
+}
+
+void ObjectGL::setMaterial(const std::string& mtl_file_path)
+{
+   std::ifstream file(mtl_file_path);
+
+   assert( file.is_open() );
+
+   while (!file.eof()) {
+      std::string line;
+      std::getline( file, line );
+
+      const std::regex space_delimiter("[ ]");
+      const std::sregex_token_iterator line_it(line.begin(), line.end(), space_delimiter, -1);
+      const std::vector<std::string> parsed(line_it, std::sregex_token_iterator());
+      if (parsed.empty()) continue;
+
+      if (parsed[0] == "Ka") {
+         AmbientReflectionColor.r = std::stof( parsed[1] );
+         AmbientReflectionColor.g = std::stof( parsed[2] );
+         AmbientReflectionColor.b = std::stof( parsed[3] );
+      }
+      else if (parsed[0] == "Kd") {
+         DiffuseReflectionColor.r = std::stof( parsed[1] );
+         DiffuseReflectionColor.g = std::stof( parsed[2] );
+         DiffuseReflectionColor.b = std::stof( parsed[3] );
+      }
+      else if (parsed[0] == "Ks") {
+         SpecularReflectionColor.r = std::stof( parsed[1] );
+         SpecularReflectionColor.g = std::stof( parsed[2] );
+         SpecularReflectionColor.b = std::stof( parsed[3] );
+      }
+      else if (parsed[0] == "Ke") {
+         EmissionColor.r = std::stof( parsed[1] );
+         EmissionColor.g = std::stof( parsed[2] );
+         EmissionColor.b = std::stof( parsed[3] );
+      }
+      else if (parsed[0] == "Ns") SpecularReflectionExponent = std::stof( parsed[1] );
+      else if (parsed[0] == "Ni") RefractiveIndex = std::stof( parsed[1] );
+      else if (parsed[0] == "illum") {
+         switch (std::stoi( parsed[0] )) {
+            case 5: MaterialType = MATERIAL_TYPE::MIRROR;
+            case 7: MaterialType = MATERIAL_TYPE::GLASS;
+            default: MaterialType = MATERIAL_TYPE::LAMBERT;
+         }
+      }
+   }
 }
 
 void ObjectGL::transferUniformsToShader(const ShaderGL* shader) const

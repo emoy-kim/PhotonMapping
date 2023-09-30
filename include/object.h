@@ -15,17 +15,18 @@ class ObjectGL
 public:
    enum class TYPE { ARBITRARY = 0, PLANE, SPHERE, BOX  };
 
+   enum class MATERIAL_TYPE { LAMBERT = 0, MIRROR, GLASS };
+
    enum LOCATION_LAYOUT { VERTEX = 0, NORMAL, TEXTURE };
 
    ObjectGL();
    virtual ~ObjectGL();
 
    void setObjectType(const TYPE& type) { Type = type; }
-   void setEmissionColor(const glm::vec4& emission_color);
-   void setAmbientReflectionColor(const glm::vec4& ambient_reflection_color);
-   void setDiffuseReflectionColor(const glm::vec4& diffuse_reflection_color);
-   void setSpecularReflectionColor(const glm::vec4& specular_reflection_color);
-   void setSpecularReflectionExponent(const float& specular_reflection_exponent);
+   void setDiffuseReflectionColor(const glm::vec4& diffuse_reflection_color)
+   {
+      DiffuseReflectionColor = diffuse_reflection_color;
+   }
    void setObject(
       GLenum draw_mode,
       const std::vector<glm::vec3>& vertices,
@@ -41,11 +42,7 @@ public:
       bool is_grayscale = false
    );
    virtual void setObject(GLenum draw_mode, const std::string& obj_file_path);
-   static void separateObjectFile(
-      const std::string& file_path,
-      const std::string& out_file_root_path,
-      const std::string& separator
-   );
+   void setMaterial(const std::string& mtl_file_path);
    int addTexture(const std::string& texture_file_path, bool is_grayscale = false);
    void addTexture(int width, int height, bool is_grayscale = false);
    void transferUniformsToShader(const ShaderGL* shader) const;
@@ -79,6 +76,7 @@ public:
 
 protected:
    TYPE Type;
+   MATERIAL_TYPE MaterialType;
    GLuint VAO;
    GLuint VBO;
    GLuint IBO;
@@ -95,6 +93,7 @@ protected:
    glm::vec4 DiffuseReflectionColor; // the intrinsic color
    glm::vec4 SpecularReflectionColor;
    float SpecularReflectionExponent;
+   float RefractiveIndex;
 
    [[nodiscard]] bool prepareTexture2DUsingFreeImage(const std::string& file_path, bool is_grayscale) const;
    void prepareNormal() const;
@@ -106,7 +105,7 @@ protected:
       const std::vector<glm::vec3>& vertices,
       const std::vector<GLuint>& vertex_indices
    );
-   [[nodiscard]] bool readObjectFile(
+   void readObjectFile(
       std::vector<glm::vec3>& vertices,
       std::vector<glm::vec3>& normals,
       std::vector<glm::vec2>& textures,
