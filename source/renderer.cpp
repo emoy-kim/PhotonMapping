@@ -287,7 +287,7 @@ void RendererGL::play()
 
    setObjects();
    setShaders();
-   //createPhotonMap();
+   createPhotonMap();
    //buildKdtree();
 
    glfwShowWindow( Window );
