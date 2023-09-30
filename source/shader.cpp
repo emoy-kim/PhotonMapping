@@ -142,15 +142,11 @@ void ShaderGL::setSceneUniformLocations(int light_num)
    Location.MaterialSpecularExponent = glGetUniformLocation( ShaderProgram, "Material.SpecularExponent" );
 
    Location.Texture[0] = glGetUniformLocation( ShaderProgram, "BaseTexture" );
-   
-   Location.UseLight = glGetUniformLocation( ShaderProgram, "UseLight" );
-   Location.LightNum = glGetUniformLocation( ShaderProgram, "LightNum" );
-   Location.GlobalAmbient = glGetUniformLocation( ShaderProgram, "GlobalAmbient" );
 
    Location.Lights.resize( light_num );
    for (int i = 0; i < light_num; ++i) {
-      Location.Lights[i].LightSwitch = glGetUniformLocation( ShaderProgram, std::string("Lights[" + std::to_string( i ) + "].LightSwitch").c_str() );
       Location.Lights[i].LightPosition = glGetUniformLocation( ShaderProgram, std::string("Lights[" + std::to_string( i ) + "].Position").c_str() );
+      Location.Lights[i].LightEmission = glGetUniformLocation( ShaderProgram, std::string("Lights[" + std::to_string( i ) + "].EmissionColor").c_str() );
       Location.Lights[i].LightAmbient = glGetUniformLocation( ShaderProgram, std::string("Lights[" + std::to_string( i ) + "].AmbientColor").c_str() );
       Location.Lights[i].LightDiffuse = glGetUniformLocation( ShaderProgram, std::string("Lights[" + std::to_string( i ) + "].DiffuseColor").c_str() );
       Location.Lights[i].LightSpecular = glGetUniformLocation( ShaderProgram, std::string("Lights[" + std::to_string( i ) + "].SpecularColor").c_str() );
@@ -160,10 +156,9 @@ void ShaderGL::setSceneUniformLocations(int light_num)
       Location.Lights[i].LightFallOffRadius = glGetUniformLocation( ShaderProgram, std::string("Lights[" + std::to_string( i ) + "].FallOffRadius").c_str() );
    }
 
+   addUniformLocation( "UseLight" );
    addUniformLocation( "UseTexture" );
-   addUniformLocation( "LightViewMatrix" );
-   addUniformLocation( "LightViewProjectionMatrix" );
-   addUniformLocation( "ShadowColor" );
+   addUniformLocation( "LightNum" );
 }
 
 void ShaderGL::transferBasicTransformationUniforms(const glm::mat4& to_world, const CameraGL* camera) const

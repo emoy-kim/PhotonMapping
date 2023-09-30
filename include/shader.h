@@ -8,13 +8,13 @@ class ShaderGL
 public:
    struct LightLocationSet
    {
-      GLint LightSwitch, LightPosition;
-      GLint LightAmbient, LightDiffuse, LightSpecular, LightFallOffRadius;
+      GLint LightPosition;
+      GLint LightEmission, LightAmbient, LightDiffuse, LightSpecular, LightFallOffRadius;
       GLint SpotlightDirection, SpotlightCutoffAngle, SpotlightFeather;
 
-      LightLocationSet() : LightSwitch( 0 ), LightPosition( 0 ), LightAmbient( 0 ), LightDiffuse( 0 ),
-      LightSpecular( 0 ), LightFallOffRadius( 0 ), SpotlightDirection( 0 ), SpotlightCutoffAngle( 0 ),
-      SpotlightFeather( 0 ) {}
+      LightLocationSet() :
+         LightPosition( 0 ), LightEmission( 0 ), LightAmbient( 0 ), LightDiffuse( 0 ), LightSpecular( 0 ),
+         LightFallOffRadius( 0 ), SpotlightDirection( 0 ), SpotlightCutoffAngle( 0 ), SpotlightFeather( 0 ) {}
    };
 
    struct LocationSet
@@ -22,12 +22,11 @@ public:
       GLint World, View, Projection, ModelViewProjection;
       GLint MaterialEmission, MaterialAmbient, MaterialDiffuse, MaterialSpecular, MaterialSpecularExponent;
       std::map<GLint, GLint> Texture; // <binding point, texture id>
-      GLint UseLight, LightNum, GlobalAmbient;
       std::vector<LightLocationSet> Lights;
 
-      LocationSet() : World( 0 ), View( 0 ), Projection( 0 ), ModelViewProjection( 0 ), MaterialEmission( 0 ),
-      MaterialAmbient( 0 ), MaterialDiffuse( 0 ), MaterialSpecular( 0 ), MaterialSpecularExponent( 0 ), UseLight( 0 ),
-      LightNum( 0 ), GlobalAmbient( 0 ) {}
+      LocationSet() :
+         World( 0 ), View( 0 ), Projection( 0 ), ModelViewProjection( 0 ), MaterialEmission( 0 ), MaterialAmbient( 0 ),
+         MaterialDiffuse( 0 ), MaterialSpecular( 0 ), MaterialSpecularExponent( 0 ) {}
    };
 
    ShaderGL();
@@ -109,16 +108,13 @@ public:
    [[nodiscard]] GLint getMaterialDiffuseLocation() const { return Location.MaterialDiffuse; }
    [[nodiscard]] GLint getMaterialSpecularLocation() const { return Location.MaterialSpecular; }
    [[nodiscard]] GLint getMaterialSpecularExponentLocation() const { return Location.MaterialSpecularExponent; }
-   [[nodiscard]] GLint getLightAvailabilityLocation() const { return Location.UseLight; }
-   [[nodiscard]] GLint getLightNumLocation() const { return Location.LightNum; }
-   [[nodiscard]] GLint getGlobalAmbientLocation() const { return Location.GlobalAmbient; }
-   [[nodiscard]] GLint getLightSwitchLocation(int light_index) const
-   {
-      return Location.Lights[light_index].LightSwitch;
-   }
    [[nodiscard]] GLint getLightPositionLocation(int light_index) const
    {
       return Location.Lights[light_index].LightPosition;
+   }
+   [[nodiscard]] GLint getLightEmissionLocation(int light_index) const
+   {
+      return Location.Lights[light_index].LightEmission;
    }
    [[nodiscard]] GLint getLightAmbientLocation(int light_index) const
    {
