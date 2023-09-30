@@ -2,21 +2,13 @@
 
 RendererGL::RendererGL() :
    Window( nullptr ), Pause( false ), NeedToUpdate( true ), FrameWidth( 1024 ), FrameHeight( 1024 ),
-   ShadowMapSize( 1024 ), DepthFBO( 0 ), DepthTextureArrayID( 0 ), ClickedPoint( -1, -1 ), ActiveCamera( nullptr ),
-   MainCamera( std::make_unique<CameraGL>() ), PCFSceneShader( std::make_unique<ShaderGL>() ),
-   LightViewDepthShader( std::make_unique<ShaderGL>() ), Lights( std::make_unique<LightGL>() ),
+   ClickedPoint( -1, -1 ), MainCamera( std::make_unique<CameraGL>() ), SceneShader( std::make_unique<ShaderGL>() ),
    PhotonMap( std::make_unique<PhotonMapGL>() ), KdtreeBuilder(), PhotonMapBuilder()
 {
    Renderer = this;
 
    initialize();
    printOpenGLInformation();
-}
-
-RendererGL::~RendererGL()
-{
-   if (DepthTextureArrayID != 0) glDeleteTextures( 1, &DepthTextureArrayID );
-   if (DepthFBO != 0) glDeleteFramebuffers( 1, &DepthFBO );
 }
 
 void RendererGL::printOpenGLInformation()
@@ -91,32 +83,6 @@ void RendererGL::writeFrame() const
    delete [] buffer;
 }
 
-void RendererGL::writeDepthTextureArray() const
-{
-   const int size = ShadowMapSize * ShadowMapSize;
-   auto* buffer = new uint8_t[size];
-   auto* raw_buffer = new GLfloat[size];
-   glBindFramebuffer( GL_FRAMEBUFFER, DepthFBO );
-   for (int s = 0; s < Lights->getTotalLightNum(); ++s) {
-      glNamedFramebufferReadBuffer( DepthFBO, GL_DEPTH_ATTACHMENT );
-      glNamedFramebufferTextureLayer( DepthFBO, GL_DEPTH_ATTACHMENT, DepthTextureArrayID, 0, s );
-      glReadPixels( 0, 0, ShadowMapSize, ShadowMapSize, GL_DEPTH_COMPONENT, GL_FLOAT, raw_buffer );
-
-      for (int i = 0; i < size; ++i) {
-         buffer[i] = static_cast<uint8_t>(LightCameras[s]->linearizeDepthValue( raw_buffer[i] ) * 255.0f);
-      }
-
-      FIBITMAP* image = FreeImage_ConvertFromRawBits(
-         buffer, ShadowMapSize, ShadowMapSize, ShadowMapSize, 8,
-         FI_RGBA_RED_MASK, FI_RGBA_GREEN_MASK, FI_RGBA_BLUE_MASK, false
-      );
-      FreeImage_Save( FIF_PNG, image, std::string("../depth" + std::to_string( s ) + ".png").c_str() );
-      FreeImage_Unload( image );
-   }
-   delete [] raw_buffer;
-   delete [] buffer;
-}
-
 void RendererGL::cleanup(GLFWwindow* window)
 {
    glfwSetWindowShouldClose( window, GLFW_TRUE );
@@ -127,26 +93,9 @@ void RendererGL::keyboard(GLFWwindow* window, int key, int scancode, int action,
    if (action != GLFW_PRESS) return;
 
    switch (key) {
-      case GLFW_KEY_0:
-         Renderer->ActiveCamera = Renderer->MainCamera.get();
-         std::cout << ">> Main Camera Selected\n";
-         break;
-      case GLFW_KEY_1:
-         Renderer->ActiveCamera = Renderer->LightCameras[0].get();
-         std::cout << ">> Light-1 Selected\n";
-         break;
       case GLFW_KEY_C:
          Renderer->writeFrame();
          std::cout << ">> Framebuffer Captured\n";
-         break;
-      case GLFW_KEY_D:
-         Renderer->writeDepthTextureArray();
-         std::cout << ">> Depth Array Captured\n";
-         break;
-      case GLFW_KEY_L:
-         Renderer->NeedToUpdate = true;
-         Renderer->Lights->toggleLightSwitch();
-         std::cout << ">> Light Turned " << (Renderer->Lights->isLightOn() ? "On!\n" : "Off!\n");
          break;
       case GLFW_KEY_P: {
          const glm::vec3 pos = Renderer->MainCamera->getCameraPosition();
@@ -168,16 +117,16 @@ void RendererGL::cursor(GLFWwindow* window, double xpos, double ypos)
 {
    if (Renderer->Pause) return;
 
-   if (Renderer->ActiveCamera->getMovingState()) {
+   if (Renderer->MainCamera->getMovingState()) {
       const auto x = static_cast<int>(std::round( xpos ));
       const auto y = static_cast<int>(std::round( ypos ));
       const int dx = x - Renderer->ClickedPoint.x;
       const int dy = y - Renderer->ClickedPoint.y;
-      Renderer->ActiveCamera->moveForward( -dy );
-      Renderer->ActiveCamera->rotateAroundWorldY( -dx );
+      Renderer->MainCamera->moveForward( -dy );
+      Renderer->MainCamera->rotateAroundWorldY( -dx );
 
       if (glfwGetMouseButton( window, GLFW_MOUSE_BUTTON_RIGHT ) == GLFW_PRESS) {
-         Renderer->ActiveCamera->pitch( -dy );
+         Renderer->MainCamera->pitch( -dy );
       }
 
       Renderer->ClickedPoint.x = x;
@@ -198,7 +147,7 @@ void RendererGL::mouse(GLFWwindow* window, int button, int action, int mods)
          Renderer->ClickedPoint.x = static_cast<int>(std::round( x ));
          Renderer->ClickedPoint.y = static_cast<int>(std::round( y ));
       }
-      Renderer->ActiveCamera->setMovingState( moving_state );
+      Renderer->MainCamera->setMovingState( moving_state );
    }
 }
 
@@ -219,197 +168,115 @@ void RendererGL::setObjects()
    const std::string sample_directory_path = std::string(CMAKE_SOURCE_DIR) + "/samples";
    const std::vector<object_t> objects = {
       /*std::make_tuple(
-         std::string(sample_directory_path + "/Tiger/tiger.obj"), ObjectGL::TYPE::ARBITRARY,
+         std::string(sample_directory_path + "/Tiger/tiger.obj"), {}, ObjectGL::TYPE::ARBITRARY,
          glm::vec4(1.0f),
          glm::translate( glm::mat4(1.0f), glm::vec3(200.0f, 0.0f, 0.0f) ) * to_tiger_object
       ),
       std::make_tuple(
-         std::string(sample_directory_path + "/Tiger/tiger.obj"), ObjectGL::TYPE::ARBITRARY,
+         std::string(sample_directory_path + "/Tiger/tiger.obj"), {}, ObjectGL::TYPE::ARBITRARY,
          glm::vec4(1.0f),
          glm::translate( glm::mat4(1.0f), glm::vec3(-150.0f, 0.0f, 0.0f) ) * to_tiger_object
       ),
       std::make_tuple(
-         std::string(sample_directory_path + "/Tiger/tiger.obj"), ObjectGL::TYPE::ARBITRARY,
+         std::string(sample_directory_path + "/Tiger/tiger.obj"), {}, ObjectGL::TYPE::ARBITRARY,
          glm::vec4(1.0f),
          glm::translate( glm::mat4(1.0f), glm::vec3(50.0f, 0.0f, -100.0f) ) * to_tiger_object
       ),
       std::make_tuple(
-         std::string(sample_directory_path + "/Tiger/tiger.obj"), ObjectGL::TYPE::ARBITRARY,
+         std::string(sample_directory_path + "/Tiger/tiger.obj"), {}, ObjectGL::TYPE::ARBITRARY,
          glm::vec4(1.0f),
          glm::translate( glm::mat4(1.0f), glm::vec3(50.0f, 30.0f, 200.0f) ) *
          glm::rotate( glm::mat4(1.0f), glm::radians( -30.0f ), glm::vec3(1.0f, 0.0f, 0.0f) ) * to_tiger_object
       ),*/
       std::make_tuple(
-         std::string(sample_directory_path + "/CornellBox/floor.obj"), ObjectGL::TYPE::PLANE,
-         glm::vec4(1.0f), cornell_box_scale
+         std::string(sample_directory_path + "/CornellBox/floor.obj"),
+         std::string(sample_directory_path + "/CornellBox/floor.mtl"),
+         ObjectGL::TYPE::PLANE, cornell_box_scale
       ),
       std::make_tuple(
-         std::string(sample_directory_path + "/CornellBox/ceiling.obj"), ObjectGL::TYPE::PLANE,
-         glm::vec4(1.0f), cornell_box_scale
+         std::string(sample_directory_path + "/CornellBox/ceiling.obj"),
+         std::string(sample_directory_path + "/CornellBox/ceiling.mtl"),
+         ObjectGL::TYPE::PLANE, cornell_box_scale
       ),
       std::make_tuple(
-         std::string(sample_directory_path + "/CornellBox/back_wall.obj"), ObjectGL::TYPE::PLANE,
-         glm::vec4(1.0f), cornell_box_scale
+         std::string(sample_directory_path + "/CornellBox/back_wall.obj"),
+         std::string(sample_directory_path + "/CornellBox/back_wall.mtl"),
+         ObjectGL::TYPE::PLANE, cornell_box_scale
       ),
       std::make_tuple(
-         std::string(sample_directory_path + "/CornellBox/left_wall.obj"), ObjectGL::TYPE::PLANE,
-         glm::vec4(1.0f, 0.0f, 0.0f, 1.0f), cornell_box_scale
+         std::string(sample_directory_path + "/CornellBox/left_wall.obj"),
+         std::string(sample_directory_path + "/CornellBox/left_wall.mtl"),
+         ObjectGL::TYPE::PLANE, cornell_box_scale
       ),
       std::make_tuple(
-         std::string(sample_directory_path + "/CornellBox/right_wall.obj"), ObjectGL::TYPE::PLANE,
-         glm::vec4(0.0f, 0.0f, 1.0f, 1.0f), cornell_box_scale
+         std::string(sample_directory_path + "/CornellBox/right_wall.obj"),
+         std::string(sample_directory_path + "/CornellBox/right_wall.mtl"),
+         ObjectGL::TYPE::PLANE, cornell_box_scale
       ),
       std::make_tuple(
-         std::string(sample_directory_path + "/CornellBox/left_sphere.obj"), ObjectGL::TYPE::SPHERE,
-         glm::vec4(1.0f), cornell_box_scale
+         std::string(sample_directory_path + "/CornellBox/left_sphere.obj"),
+         std::string(sample_directory_path + "/CornellBox/left_sphere.mtl"),
+         ObjectGL::TYPE::SPHERE, cornell_box_scale
       ),
       std::make_tuple(
-         std::string(sample_directory_path + "/CornellBox/right_sphere.obj"), ObjectGL::TYPE::SPHERE,
-         glm::vec4(1.0f), cornell_box_scale
+         std::string(sample_directory_path + "/CornellBox/right_sphere.obj"),
+         std::string(sample_directory_path + "/CornellBox/right_sphere.mtl"),
+         ObjectGL::TYPE::SPHERE, cornell_box_scale
       ),
       std::make_tuple(
-         std::string(sample_directory_path + "/CornellBox/water.obj"), ObjectGL::TYPE::ARBITRARY,
-         glm::vec4(1.0f), cornell_box_scale
+         std::string(sample_directory_path + "/CornellBox/water.obj"),
+         std::string(sample_directory_path + "/CornellBox/water.mtl"),
+         ObjectGL::TYPE::ARBITRARY, cornell_box_scale
+      ),
+      std::make_tuple(
+         std::string(sample_directory_path + "/CornellBox/light.obj"),
+         std::string(sample_directory_path + "/CornellBox/light.mtl"),
+         ObjectGL::TYPE::LIGHT, cornell_box_scale
       )
    };
    PhotonMap->setObjects( objects );
 }
 
-void RendererGL::setLightViewFrameBuffers()
-{
-   glCreateTextures( GL_TEXTURE_2D_ARRAY, 1, &DepthTextureArrayID );
-   glTextureStorage3D( DepthTextureArrayID, 1, GL_DEPTH_COMPONENT32F, ShadowMapSize, ShadowMapSize, Lights->getTotalLightNum() );
-   glTextureParameteri( DepthTextureArrayID, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR );
-   glTextureParameteri( DepthTextureArrayID, GL_TEXTURE_MAG_FILTER, GL_LINEAR );
-   glTextureParameteri( DepthTextureArrayID, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_BORDER );
-   glTextureParameteri( DepthTextureArrayID, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_BORDER );
-   glTextureParameteri( DepthTextureArrayID, GL_TEXTURE_COMPARE_MODE, GL_COMPARE_REF_TO_TEXTURE );
-   glTextureParameteri( DepthTextureArrayID, GL_TEXTURE_COMPARE_FUNC, GL_LEQUAL );
-
-   glCreateFramebuffers( 1, &DepthFBO );
-   for (int i = 0; i < Lights->getTotalLightNum(); ++i) {
-      glNamedFramebufferTextureLayer( DepthFBO, GL_DEPTH_ATTACHMENT, DepthTextureArrayID, 0, i );
-   }
-
-   if (glCheckNamedFramebufferStatus( DepthFBO, GL_FRAMEBUFFER ) != GL_FRAMEBUFFER_COMPLETE) {
-      std::cerr << "DepthFBO Setup Error\n";
-   }
-}
-
-void RendererGL::setLights()
-{
-   glm::vec4 light_position(0.0f, 477.0f, 0.0f, 1.0f);
-   glm::vec4 ambient_color(0.78f, 0.78f, 0.78f, 1.0f);
-   glm::vec4 diffuse_color(0.78f, 0.78f, 0.78f, 1.0f);
-   glm::vec4 specular_color(0.0f, 0.0f, 0.0f, 1.0f);
-   const glm::vec3 reference_position(0.0f, 0.0f, 0.0f);
-   Lights->addLight(
-      light_position, ambient_color, diffuse_color, specular_color,
-      reference_position - glm::vec3(light_position),
-      180.0f,
-      0.5f,
-      1000.0f
-   );
-
-   const std::vector<glm::vec3> reference_points = {
-      glm::vec3(Lights->getLightPosition( 0 )) + Lights->getSpotlightDirection( 0 )
-   };
-
-   const int light_num = Lights->getTotalLightNum();
-   LightViewMatrices.resize( light_num );
-   LightViewProjectionMatrices.resize( light_num );
-   LightCameras.resize( light_num );
-   for (int i = 0; i < light_num; ++i) {
-      LightCameras[i] = std::make_unique<CameraGL>();
-      LightCameras[i]->updatePerspectiveCamera( ShadowMapSize, ShadowMapSize );
-      LightCameras[i]->updateNearFarPlanes( 100.0f, 1000.0f );
-      LightCameras[i]->updateCameraView(
-         glm::vec3(Lights->getLightPosition( i )),
-         reference_points[i],
-         glm::vec3(0.0f, 1.0f, 0.0f)
-      );
-   }
-   ActiveCamera = LightCameras[0].get();
-
-   setLightViewFrameBuffers();
-}
-
 void RendererGL::setShaders() const
 {
    const std::string shader_directory_path = std::string(CMAKE_SOURCE_DIR) + "/shaders";
-   LightViewDepthShader->setShader(
-      std::string(shader_directory_path + "/shadow/light_view_depth_generator.vert").c_str(),
-      std::string(shader_directory_path + "/shadow/light_view_depth_generator.frag").c_str()
+   SceneShader->setShader(
+      std::string(shader_directory_path + "/scene_shader.vert").c_str(),
+      std::string(shader_directory_path + "/scene_shader.frag").c_str()
    );
-   PCFSceneShader->setShader(
-      std::string(shader_directory_path + "/shadow/scene_shader.vert").c_str(),
-      std::string(shader_directory_path + "/shadow/scene_shader.frag").c_str()
-   );
-   LightViewDepthShader->setLightViewUniformLocations();
-   PCFSceneShader->setSceneUniformLocations( Lights->getTotalLightNum() );
-
+   SceneShader->setSceneUniformLocations( PhotonMap->getLightNum() );
    setKdtreeShaders();
    setPhotonMapShaders();
 }
 
-void RendererGL::drawObjects(ShaderGL* shader, CameraGL* camera) const
+void RendererGL::drawScene() const
 {
+   glViewport( 0, 0, FrameWidth, FrameHeight );
+   glBindFramebuffer( GL_FRAMEBUFFER, 0 );
+   glUseProgram( SceneShader->getShaderProgram() );
+
+   const LightGL* light = PhotonMap->getLight( 0 );
+   light->transferUniformsToShader( SceneShader.get(), 0 );
+
+   SceneShader->uniform1i( "UseLight", 1 );
+   SceneShader->uniform1i( "UseTexture", 0 );
+   SceneShader->uniform1i( "LightNum", 1 );
    const auto& objects = PhotonMap->getObjects();
    const auto& to_worlds = PhotonMap->getWorldMatrices();
    for (size_t i = 0; i < objects.size(); ++i) {
       glBindVertexArray( objects[i]->getVAO() );
       glBindBuffer( GL_ELEMENT_ARRAY_BUFFER, objects[i]->getIBO() );
-      objects[i]->transferUniformsToShader( shader );
-      shader->transferBasicTransformationUniforms( to_worlds[i], camera );
+      objects[i]->transferUniformsToShader( SceneShader.get() );
+      SceneShader->transferBasicTransformationUniforms( to_worlds[i], MainCamera.get() );
       glDrawElements( objects[i]->getDrawMode(), objects[i]->getIndexNum(), GL_UNSIGNED_INT, nullptr );
    }
-}
-
-void RendererGL::drawDepthMapFromLightView()
-{
-   glViewport( 0, 0, ShadowMapSize, ShadowMapSize );
-   glBindFramebuffer( GL_FRAMEBUFFER, DepthFBO );
-   glUseProgram( LightViewDepthShader->getShaderProgram() );
-   glColorMask( GL_FALSE, GL_FALSE, GL_FALSE, GL_FALSE );
-
-   for (int i = 0; i < Lights->getTotalLightNum(); ++i) {
-      glNamedFramebufferTextureLayer( DepthFBO, GL_DEPTH_ATTACHMENT, DepthTextureArrayID, 0, i );
-
-      constexpr GLfloat one = 1.0f;
-      glClearNamedFramebufferfv( DepthFBO, GL_DEPTH, 0, &one );
-
-      drawObjects( LightViewDepthShader.get(), LightCameras[i].get() );
-
-      LightViewMatrices[i] = LightCameras[i]->getViewMatrix();
-      LightViewProjectionMatrices[i] = LightCameras[i]->getProjectionMatrix() * LightCameras[i]->getViewMatrix();
-   }
-   glColorMask( GL_TRUE, GL_TRUE, GL_TRUE, GL_TRUE );
-}
-
-void RendererGL::drawSceneWithShadow() const
-{
-   glViewport( 0, 0, FrameWidth, FrameHeight );
-   glBindFramebuffer( GL_FRAMEBUFFER, 0 );
-   glUseProgram( PCFSceneShader->getShaderProgram() );
-
-   Lights->transferUniformsToShader( PCFSceneShader.get() );
-
-   PCFSceneShader->uniform4fv( "ShadowColor", { 0.24, 0.16f, 0.13f, 1.0f } );
-   PCFSceneShader->uniformMat4fv( "LightViewMatrix", Lights->getTotalLightNum(), LightViewMatrices.data() );
-   PCFSceneShader->uniformMat4fv( "LightViewProjectionMatrix", Lights->getTotalLightNum(), LightViewProjectionMatrices.data() );
-
-   glBindTextureUnit( 1, DepthTextureArrayID );
-
-   PCFSceneShader->uniform1i( "UseTexture", 0 );
-   drawObjects( PCFSceneShader.get(), MainCamera.get() );
 }
 
 void RendererGL::render()
 {
    if (NeedToUpdate) {
       glClear( GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT );
-      drawDepthMapFromLightView();
-      drawSceneWithShadow();
+      drawScene();
       NeedToUpdate = false;
    }
 }
@@ -419,9 +286,8 @@ void RendererGL::play()
    if (glfwWindowShouldClose( Window )) initialize();
 
    setObjects();
-   setLights();
    setShaders();
-   createPhotonMap();
+   //createPhotonMap();
    //buildKdtree();
 
    glfwShowWindow( Window );

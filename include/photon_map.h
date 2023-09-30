@@ -1,13 +1,10 @@
 #pragma once
 
-#include "light.h"
+#include "light_object.h"
 #include "kdtree_object.h"
 
-// <obj file path, mtl file path, type, color, world matrix>
-using object_t = std::tuple<std::string, std::string, ObjectGL::TYPE, glm::vec4, glm::mat4>;
-
-// <obj file path, mtl file path, world matrix>
-using light_t = std::tuple<std::string, std::string, glm::mat4>;
+// <obj file path, mtl file path, type, world matrix>
+using object_t = std::tuple<std::string, std::string, ObjectGL::TYPE, glm::mat4>;
 
 class PhotonMapGL final
 {
@@ -26,22 +23,29 @@ public:
       Photon() : Power(), Position(), IncomingDirection() {}
    };
 
-   PhotonMapGL() = default;
+   PhotonMapGL();
    ~PhotonMapGL() = default;
 
    void setObjects(const std::vector<object_t>& objects);
-   void setLights(const std::vector<light_t>& lights);
    void prepareBuilding();
+   [[nodiscard]] int getLightNum() const { return LightNum; }
+   [[nodiscard]] const LightGL* getLight(int index) const
+   {
+      const auto* object = Objects[LightIndices[index]].get();
+      assert( object->isLight() );
+      return dynamic_cast<const LightGL*>(object);
+   }
    [[nodiscard]] const std::vector<glm::mat4>& getWorldMatrices() const { return ToWorlds; }
    [[nodiscard]] const std::vector<std::shared_ptr<ObjectGL>>& getObjects() const { return Objects; }
 
 private:
+   int LightNum;
+   std::vector<int> LightIndices;
    std::vector<Photon> Photons;
    std::shared_ptr<KdtreeGL> GlobalPhotonTree;
    std::vector<std::shared_ptr<ObjectGL>> Objects;
    std::vector<glm::mat4> ToWorlds;
    std::vector<Rect> WorldBounds;
-   std::shared_ptr<LightGL> Lights;
 
    [[nodiscard]] static bool isNumber(const std::string& n)
    {

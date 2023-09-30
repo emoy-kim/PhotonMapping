@@ -7,7 +7,6 @@
 #pragma once
 
 #include "base.h"
-#include "light.h"
 #include "photon_map.h"
 #include "kdtree_shader.h"
 #include "photon_map_shader.h"
@@ -16,7 +15,7 @@ class RendererGL final
 {
 public:
    RendererGL();
-   ~RendererGL();
+   ~RendererGL() = default;
 
    RendererGL(const RendererGL&) = delete;
    RendererGL(const RendererGL&&) = delete;
@@ -93,19 +92,10 @@ private:
    bool NeedToUpdate;
    int FrameWidth;
    int FrameHeight;
-   int ShadowMapSize;
-   GLuint DepthFBO;
-   GLuint DepthTextureArrayID;
    glm::ivec2 ClickedPoint;
-   CameraGL* ActiveCamera;
    std::unique_ptr<CameraGL> MainCamera;
-   std::vector<std::unique_ptr<CameraGL>> LightCameras;
-   std::unique_ptr<ShaderGL> PCFSceneShader;
-   std::unique_ptr<ShaderGL> LightViewDepthShader;
-   std::unique_ptr<LightGL> Lights;
+   std::unique_ptr<ShaderGL> SceneShader;
    std::unique_ptr<PhotonMapGL> PhotonMap;
-   std::vector<glm::mat4> LightViewMatrices;
-   std::vector<glm::mat4> LightViewProjectionMatrices;
    KdtreeBuild KdtreeBuilder;
    PhotonMapBuild PhotonMapBuilder;
 
@@ -114,7 +104,6 @@ private:
    void registerCallbacks() const;
    void initialize();
    void writeFrame() const;
-   void writeDepthTextureArray() const;
    static void printOpenGLInformation();
    static void cleanup(GLFWwindow* window);
    static void keyboard(GLFWwindow* window, int key, int scancode, int action, int mods);
@@ -122,12 +111,8 @@ private:
    static void mouse(GLFWwindow* window, int button, int action, int mods);
 
    void setObjects();
-   void setLightViewFrameBuffers();
-   void setLights();
    void setShaders() const;
-   void drawObjects(ShaderGL* shader, CameraGL* camera) const;
-   void drawDepthMapFromLightView();
-   void drawSceneWithShadow() const;
+   void drawScene() const;
    void render();
 
    // renderer_kdtree.cpp

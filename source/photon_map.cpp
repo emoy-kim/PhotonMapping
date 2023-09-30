@@ -1,5 +1,10 @@
 #include "photon_map.h"
 
+PhotonMapGL::PhotonMapGL() : LightNum( 0 )
+{
+
+}
+
 void PhotonMapGL::separateObjectFile(
    const std::string& file_path,
    const std::string& out_file_root_path,
@@ -93,28 +98,38 @@ void PhotonMapGL::separateMaterialFile(
 
 void PhotonMapGL::setObjects(const std::vector<object_t>& objects)
 {
+   LightNum = 0;
    Objects.clear();
    ToWorlds.clear();
    WorldBounds.clear();
+   LightIndices.clear();
    Objects.resize( objects.size() );
    ToWorlds.resize( objects.size() );
    WorldBounds.resize( objects.size() );
    for (size_t i = 0; i < objects.size(); ++i) {
-      Objects[i] = std::make_shared<ObjectGL>();
-      Objects[i]->setObject( GL_TRIANGLES, std::get<0>( objects[i] ) );
-      Objects[i]->setMaterial( std::get<1>( objects[i] ) );
-      Objects[i]->setObjectType( std::get<2>( objects[i] ) );
-      Objects[i]->setDiffuseReflectionColor( std::get<3>( objects[i] ) );
-      ToWorlds[i] = std::get<4>( objects[i] );
+      const auto object_type = std::get<2>( objects[i] );
+      if (object_type == ObjectGL::TYPE::LIGHT) {
+         LightNum++;
+         LightIndices.emplace_back( i );
+         Objects[i] = std::make_shared<LightGL>();
+         Objects[i]->setObjectWithTransform(
+            GL_TRIANGLES, object_type, std::get<3>( objects[i] ),
+            std::get<0>( objects[i] ), std::get<1>( objects[i] )
+         );
+         ToWorlds[i] = glm::mat4(1.0f);
+      }
+      else {
+         Objects[i] = std::make_shared<ObjectGL>();
+         Objects[i]->setObject(
+            GL_TRIANGLES, object_type,
+            std::get<0>( objects[i] ), std::get<1>( objects[i] )
+         );
+         ToWorlds[i] = std::get<3>( objects[i] );
+      }
       WorldBounds[i] = Objects[i]->getBoundingBox();
       WorldBounds[i].MinPoint = glm::vec3(ToWorlds[i] * glm::vec4(WorldBounds[i].MinPoint, 1.0f));
       WorldBounds[i].MaxPoint = glm::vec3(ToWorlds[i] * glm::vec4(WorldBounds[i].MaxPoint, 1.0f));
    }
-}
-
-void PhotonMapGL::setLights(const std::vector<light_t>& lights)
-{
-
 }
 
 void PhotonMapGL::prepareBuilding()
