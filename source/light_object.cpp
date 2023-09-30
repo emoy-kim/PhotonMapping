@@ -38,15 +38,15 @@ void LightGL::setObjectWithTransform(
    const bool normals_exist = !normals.empty();
    const glm::mat4 vector_transform = glm::transpose( glm::inverse( transform ) );
    for (uint i = 0; i < vertices.size(); ++i) {
-      const glm::vec3 p = glm::vec3(transform * glm::vec4(vertices[i], 1.0f));
-      DataBuffer.push_back( p.x );
-      DataBuffer.push_back( p.y );
-      DataBuffer.push_back( p.z );
+      vertices[i] = glm::vec3(transform * glm::vec4(vertices[i], 1.0f));
+      DataBuffer.push_back( vertices[i].x );
+      DataBuffer.push_back( vertices[i].y );
+      DataBuffer.push_back( vertices[i].z );
       if (normals_exist) {
-         const glm::vec3 n = glm::vec3(vector_transform * glm::vec4(normals[i], 0.0f));
-         DataBuffer.push_back( n.x );
-         DataBuffer.push_back( n.y );
-         DataBuffer.push_back( n.z );
+         normals[i] = glm::normalize( glm::vec3(vector_transform * glm::vec4(normals[i], 0.0f)) );
+         DataBuffer.push_back( normals[i].x );
+         DataBuffer.push_back( normals[i].y );
+         DataBuffer.push_back( normals[i].z );
       }
       VerticesCount++;
    }
@@ -70,4 +70,6 @@ void LightGL::setObjectWithTransform(
    AreaLight.Vertices[1] = vertices[1];
    AreaLight.Vertices[2] = vertices[2];
    AreaLight.Vertices[3] = vertices[3];
+
+   // need to trasnform BoundingBox ...
 }
