@@ -134,14 +134,14 @@ void ObjectGL::setObject(
    VerticesCount = 0;
    DataBuffer.clear();
    for (size_t i = 0; i < vertices.size(); ++i) {
-      DataBuffer.push_back( vertices[i].x );
-      DataBuffer.push_back( vertices[i].y );
-      DataBuffer.push_back( vertices[i].z );
-      DataBuffer.push_back( normals[i].x );
-      DataBuffer.push_back( normals[i].y );
-      DataBuffer.push_back( normals[i].z );
-      DataBuffer.push_back( textures[i].x );
-      DataBuffer.push_back( textures[i].y );
+      DataBuffer.emplace_back( vertices[i].x );
+      DataBuffer.emplace_back( vertices[i].y );
+      DataBuffer.emplace_back( vertices[i].z );
+      DataBuffer.emplace_back( normals[i].x );
+      DataBuffer.emplace_back( normals[i].y );
+      DataBuffer.emplace_back( normals[i].z );
+      DataBuffer.emplace_back( textures[i].x );
+      DataBuffer.emplace_back( textures[i].y );
       VerticesCount++;
    }
    const int n_bytes_per_vertex = 8 * sizeof( GLfloat );
@@ -314,20 +314,21 @@ void ObjectGL::setObject(
    std::vector<glm::vec2> textures;
    readObjectFile( vertices, normals, textures, obj_file_path );
 
+   DataBuffer.clear();
    const bool normals_exist = !normals.empty();
    const bool textures_exist = !textures.empty();
    for (uint i = 0; i < vertices.size(); ++i) {
-      DataBuffer.push_back( vertices[i].x );
-      DataBuffer.push_back( vertices[i].y );
-      DataBuffer.push_back( vertices[i].z );
+      DataBuffer.emplace_back( vertices[i].x );
+      DataBuffer.emplace_back( vertices[i].y );
+      DataBuffer.emplace_back( vertices[i].z );
       if (normals_exist) {
-         DataBuffer.push_back( normals[i].x );
-         DataBuffer.push_back( normals[i].y );
-         DataBuffer.push_back( normals[i].z );
+         DataBuffer.emplace_back( normals[i].x );
+         DataBuffer.emplace_back( normals[i].y );
+         DataBuffer.emplace_back( normals[i].z );
       }
       if (textures_exist) {
-         DataBuffer.push_back( textures[i].x );
-         DataBuffer.push_back( textures[i].y );
+         DataBuffer.emplace_back( textures[i].x );
+         DataBuffer.emplace_back( textures[i].y );
       }
       VerticesCount++;
    }
@@ -357,23 +358,24 @@ void ObjectGL::setObjectWithTransform(
    std::vector<glm::vec2> textures;
    readObjectFile( vertices, normals, textures, obj_file_path );
 
+   DataBuffer.clear();
    const bool normals_exist = !normals.empty();
    const bool textures_exist = !textures.empty();
    const glm::mat4 vector_transform = glm::transpose( glm::inverse( transform ) );
    for (uint i = 0; i < vertices.size(); ++i) {
       const glm::vec3 p = glm::vec3(transform * glm::vec4(vertices[i], 1.0f));
-      DataBuffer.push_back( p.x );
-      DataBuffer.push_back( p.y );
-      DataBuffer.push_back( p.z );
+      DataBuffer.emplace_back( p.x );
+      DataBuffer.emplace_back( p.y );
+      DataBuffer.emplace_back( p.z );
       if (normals_exist) {
-         const glm::vec3 n = glm::vec3(vector_transform * glm::vec4(normals[i], 0.0f));
-         DataBuffer.push_back( n.x );
-         DataBuffer.push_back( n.y );
-         DataBuffer.push_back( n.z );
+         const glm::vec3 n = glm::normalize( glm::vec3(vector_transform * glm::vec4(normals[i], 0.0f)) );
+         DataBuffer.emplace_back( n.x );
+         DataBuffer.emplace_back( n.y );
+         DataBuffer.emplace_back( n.z );
       }
       if (textures_exist) {
-         DataBuffer.push_back( textures[i].x );
-         DataBuffer.push_back( textures[i].y );
+         DataBuffer.emplace_back( textures[i].x );
+         DataBuffer.emplace_back( textures[i].y );
       }
       VerticesCount++;
    }
@@ -391,9 +393,10 @@ void ObjectGL::setObjectWithTransform(
 
 void ObjectGL::transferUniformsToShader(const ShaderGL* shader) const
 {
-   glUniform4fv( shader->getMaterialEmissionLocation(), 1, &EmissionColor[0] );
-   glUniform4fv( shader->getMaterialAmbientLocation(), 1, &AmbientReflectionColor[0] );
-   glUniform4fv( shader->getMaterialDiffuseLocation(), 1, &DiffuseReflectionColor[0] );
-   glUniform4fv( shader->getMaterialSpecularLocation(), 1, &SpecularReflectionColor[0] );
-   glUniform1f( shader->getMaterialSpecularExponentLocation(), SpecularReflectionExponent );
+   const GLuint program = shader->getShaderProgram();
+   glProgramUniform4fv( program, shader->getMaterialEmissionLocation(), 1, &EmissionColor[0] );
+   glProgramUniform4fv( program, shader->getMaterialAmbientLocation(), 1, &AmbientReflectionColor[0] );
+   glProgramUniform4fv( program, shader->getMaterialDiffuseLocation(), 1, &DiffuseReflectionColor[0] );
+   glProgramUniform4fv( program, shader->getMaterialSpecularLocation(), 1, &SpecularReflectionColor[0] );
+   glProgramUniform1f( program, shader->getMaterialSpecularExponentLocation(), SpecularReflectionExponent );
 }

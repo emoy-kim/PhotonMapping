@@ -21,20 +21,21 @@ void KdtreeGL::setObject(
    std::vector<glm::vec2> textures;
    readObjectFile( Vertices, normals, textures, obj_file_path );
 
+   DataBuffer.clear();
    const bool normals_exist = !normals.empty();
    const bool textures_exist = !textures.empty();
    for (uint i = 0; i < Vertices.size(); ++i) {
-      DataBuffer.push_back( Vertices[i].x );
-      DataBuffer.push_back( Vertices[i].y );
-      DataBuffer.push_back( Vertices[i].z );
+      DataBuffer.emplace_back( Vertices[i].x );
+      DataBuffer.emplace_back( Vertices[i].y );
+      DataBuffer.emplace_back( Vertices[i].z );
       if (normals_exist) {
-         DataBuffer.push_back( normals[i].x );
-         DataBuffer.push_back( normals[i].y );
-         DataBuffer.push_back( normals[i].z );
+         DataBuffer.emplace_back( normals[i].x );
+         DataBuffer.emplace_back( normals[i].y );
+         DataBuffer.emplace_back( normals[i].z );
       }
       if (textures_exist) {
-         DataBuffer.push_back( textures[i].x );
-         DataBuffer.push_back( textures[i].y );
+         DataBuffer.emplace_back( textures[i].x );
+         DataBuffer.emplace_back( textures[i].y );
       }
       VerticesCount++;
    }
