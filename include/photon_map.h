@@ -53,6 +53,7 @@ public:
    }
    [[nodiscard]] const std::vector<glm::mat4>& getWorldMatrices() const { return ToWorlds; }
    [[nodiscard]] const std::vector<std::shared_ptr<ObjectGL>>& getObjects() const { return Objects; }
+   [[nodiscard]] GLuint getAreaLightBuffer() const { return AreaLightBuffer; }
 
 private:
    int LightNum;

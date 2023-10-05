@@ -22,7 +22,7 @@ void RendererGL::createPhotonMap()
    PhotonMapBuilder.BuildPhotonMap->uniform1i( "MaxDepth", PhotonMapGL::MaxDepth );
    //PhotonMapBuilder.CopyCoordinates->uniform1i( "Dim", dim );
    //glBindBufferBase( GL_SHADER_STORAGE_BUFFER, 0, Object->getBuffer( axis ) );
-   //glBindBufferBase( GL_SHADER_STORAGE_BUFFER, 1, Object->getReference( axis ) );
+   glBindBufferBase( GL_SHADER_STORAGE_BUFFER, 1, PhotonMap->getAreaLightBuffer() );
    glDispatchCompute( PhotonMapGL::ThreadBlockNum, 1, 1 );
    glMemoryBarrier( GL_SHADER_STORAGE_BARRIER_BIT );
 }

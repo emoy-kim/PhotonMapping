@@ -14,7 +14,7 @@ struct AreaLight
    float Area;
    vec3 Emission;
    vec3 Normal;
-   vec3 Vertices[4];
+   vec3 Vertices[3];
 };
 
 layout (binding = 0, std430) buffer Photons { Photon photons[]; };
@@ -50,21 +50,22 @@ vec3 getRandomPointInUnitSphere(inout float pdf, inout uint seed)
 
 vec3 getSampleRayFromLight(inout vec3 ray_origin, inout vec3 ray_direction)
 {
-   // Currently, the number of lights is 1.
+   // Currently, the number of lights is 2.
    uint seed = (gl_GlobalInvocationID.x * 1973u + Seed * 9277u) | 1u;
-   vec3 v0 = lights[0].Vertices[0];
-   vec3 v1 = lights[0].Vertices[2];
-   vec3 v2 = getRandomFloat( seed ) > 0.5f ? lights[0].Vertices[1] : lights[0].Vertices[3];
+   int light_index = getRandomFloat( seed ) > 0.5f ? 0 : 1;
+   vec3 v0 = lights[light_index].Vertices[0];
+   vec3 v1 = lights[light_index].Vertices[1];
+   vec3 v2 = lights[light_index].Vertices[2];
    float a = getRandomFloat( seed );
    float b = getRandomFloat( seed );
    ray_origin = (one - (a + b)) * v0 + a * v1 + b * v2;
-   vec3 normal = lights[0].Normal;
+   vec3 normal = lights[light_index].Normal;
    vec3 du = abs( normal.y ) < 0.9f ?
       normalize( cross( normal, vec3(zero, one, zero) ) ) : normalize( cross( normal, vec3(zero, zero, -one) ) );
    vec3 dv = normalize( cross( du, normal ) );
-   float pdf = one / lights[0].Area;
+   float pdf = one / lights[light_index].Area;
    ray_direction = mat3(du, normal, dv) * getRandomPointInUnitSphere( pdf, seed );
-   return lights[0].Emission / pdf * abs( dot( ray_direction, normal ) );
+   return lights[light_index].Emission / pdf * abs( dot( ray_direction, normal ) );
 }
 
 bool findIntersection()
