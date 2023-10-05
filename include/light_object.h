@@ -5,16 +5,6 @@
 class LightGL final : public ObjectGL
 {
 public:
-   struct AreaLightInfo
-   {
-      alignas(4) float Area;
-      alignas(16) glm::vec3 Emission;
-      alignas(16) glm::vec3 Normal;
-      alignas(16) glm::vec3 Vertices[4];
-
-      AreaLightInfo() : Area( 0.0f ), Emission(), Normal(), Vertices{} {}
-   };
-
    LightGL();
    ~LightGL() override = default;
 
@@ -27,6 +17,10 @@ public:
       const std::string& obj_file_path,
       const std::string& mtl_file_path
    ) override;
+   [[nodiscard]] glm::vec3 getNormal() const { return SpotlightDirection; }
+   [[nodiscard]] glm::vec4 getCentroid() const;
+   [[nodiscard]] const std::vector<float>& getAreas() const { return Areas; }
+   [[nodiscard]] const std::vector<std::array<glm::vec3, 3>>& getTriangles() const { return Triangles; }
 
 private:
    bool TurnLightOn;
@@ -34,5 +28,6 @@ private:
    float SpotlightFeather;
    float FallOffRadius;
    glm::vec3 SpotlightDirection;
-   AreaLightInfo AreaLight;
+   std::vector<float> Areas;
+   std::vector<std::array<glm::vec3, 3>> Triangles;
 };

@@ -1,8 +1,12 @@
 #include "photon_map.h"
 
-PhotonMapGL::PhotonMapGL() : LightNum( 0 )
+PhotonMapGL::PhotonMapGL() : LightNum( 0 ), AreaLightBuffer( 0 )
 {
+}
 
+PhotonMapGL::~PhotonMapGL()
+{
+   if (AreaLightBuffer != 0) glDeleteBuffers( 1, &AreaLightBuffer );
 }
 
 void PhotonMapGL::separateObjectFile(
@@ -134,7 +138,22 @@ void PhotonMapGL::setObjects(const std::vector<object_t>& objects)
 
 void PhotonMapGL::prepareBuilding()
 {
+   assert( LightNum > 0 && AreaLightBuffer == 0 );
 
+   const auto light = std::dynamic_pointer_cast<LightGL>(Objects[LightIndices[0]]);
+   const auto& areas = light->getAreas();
+   const auto& triangles = light->getTriangles();
+   const glm::vec3 normal = light->getNormal();
+   const glm::vec3 emission = light->getEmissionColor();
+   const auto size = static_cast<int>(triangles.size());
+   std::vector<AreaLight> area_lights;
+   for (int i = 0; i < size; ++i) {
+      area_lights.emplace_back( areas[i], emission, normal, triangles[i] );
+   }
+
+   glCreateBuffers( 1, &AreaLightBuffer );
+   glNamedBufferStorage( AreaLightBuffer, sizeof( AreaLight ), nullptr, GL_DYNAMIC_STORAGE_BIT );
+   glNamedBufferSubData( AreaLightBuffer, 0, static_cast<GLsizei>(sizeof( AreaLight )), area_lights.data() );
 }
 
 #if 0

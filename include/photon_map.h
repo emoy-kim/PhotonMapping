@@ -23,8 +23,24 @@ public:
       Photon() : Power(), Position(), IncomingDirection() {}
    };
 
+   struct AreaLight
+   {
+      alignas(4) float Area;
+      alignas(16) glm::vec3 Emission;
+      alignas(16) glm::vec3 Normal;
+      alignas(16) glm::vec3 Vertices[3];
+
+      AreaLight() : Area( 0.0f ), Emission(), Normal(), Vertices{} {}
+      AreaLight(
+         float area,
+         const glm::vec3& emission,
+         const glm::vec3& normal,
+         const std::array<glm::vec3, 3>& vertices
+      ) : Area( area ), Emission( emission ), Normal( normal ), Vertices{ vertices[0], vertices[1], vertices[2] } {}
+   };
+
    PhotonMapGL();
-   ~PhotonMapGL() = default;
+   ~PhotonMapGL();
 
    void setObjects(const std::vector<object_t>& objects);
    void prepareBuilding();
@@ -46,6 +62,7 @@ private:
    std::vector<std::shared_ptr<ObjectGL>> Objects;
    std::vector<glm::mat4> ToWorlds;
    std::vector<Rect> WorldBounds;
+   GLuint AreaLightBuffer;
 
    [[nodiscard]] static bool isNumber(const std::string& n)
    {

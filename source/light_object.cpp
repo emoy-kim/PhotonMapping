@@ -1,18 +1,24 @@
 #include "light_object.h"
 
 LightGL::LightGL() :
-   ObjectGL(), TurnLightOn( true ), SpotlightCutoffAngle( 180.0f ), SpotlightFeather( 0.0f ), FallOffRadius( 1000.0f ),
-   SpotlightDirection( 0.0f, 0.0f, -1.0f ), AreaLight()
+   ObjectGL(), TurnLightOn( true ), SpotlightCutoffAngle( 180.0f ), SpotlightFeather( 0.0f ),
+   FallOffRadius( 1000.0f ), SpotlightDirection( 0.0f, 0.0f, -1.0f ), Areas{}, Triangles{}
 {
+}
+
+glm::vec4 LightGL::getCentroid() const
+{
+   glm::vec3 sum(0.0f);
+   for (const auto& t : Triangles) {
+      sum += t[0] + t[1] + t[2];
+   }
+   return { sum / static_cast<float>(Triangles.size() * 3), 1.0f };
 }
 
 void LightGL::transferUniformsToShader(const ShaderGL* shader, int index) const
 {
    const GLuint program = shader->getShaderProgram();
-   const glm::vec3 centroid =
-      (AreaLight.Vertices[0] + AreaLight.Vertices[1] + AreaLight.Vertices[2] + AreaLight.Vertices[3]) * 0.25f;
-   const glm::vec4 position(centroid, 1.0f);
-   glProgramUniform4fv( program, shader->getLightPositionLocation( index ), 1, &position[0] );
+   glProgramUniform4fv( program, shader->getLightPositionLocation( index ), 1, &getCentroid()[0] );
    glProgramUniform4fv( program, shader->getLightEmissionLocation( index ), 1, &EmissionColor[0] );
    glProgramUniform4fv( program, shader->getLightAmbientLocation( index ), 1, &AmbientReflectionColor[0] );
    glProgramUniform4fv( program, shader->getLightDiffuseLocation( index ), 1, &DiffuseReflectionColor[0] );
@@ -64,16 +70,17 @@ void LightGL::setObjectWithTransform(
 
    if (!mtl_file_path.empty()) setMaterial( mtl_file_path );
 
-   const glm::vec3 a0 = glm::cross( vertices[1] - vertices[0], vertices[2] - vertices[0] );
-   const glm::vec3 a1 = glm::cross( vertices[3] - vertices[0], vertices[2] - vertices[0] );
-   AreaLight.Area = (glm::length( a0 ) + glm::length( a1 )) * 0.5f;
-   AreaLight.Emission = EmissionColor;
-   AreaLight.Normal = normals[0];
-   AreaLight.Vertices[0] = vertices[0];
-   AreaLight.Vertices[1] = vertices[1];
-   AreaLight.Vertices[2] = vertices[2];
-   AreaLight.Vertices[3] = vertices[3];
-
+   Areas.clear();
+   Triangles.clear();
+   const auto size = static_cast<int>(IndexBuffer.size());
+   for (int i = 0; i < size; i += 3) {
+      const GLuint n0 = IndexBuffer[i];
+      const GLuint n1 = IndexBuffer[i + 1];
+      const GLuint n2 = IndexBuffer[i + 2];
+      const glm::vec3 normal = glm::cross( vertices[n1] - vertices[n0], vertices[n2] - vertices[n0] );
+      Areas.emplace_back( glm::length( normal ) * 0.5f );
+      Triangles.emplace_back( std::array<glm::vec3, 3>{ vertices[n0], vertices[n1], vertices[n2] } );
+   }
    SpotlightDirection = normals[0];
    BoundingBox.MinPoint = glm::vec3(transform * glm::vec4(BoundingBox.MinPoint, 1.0f));
    BoundingBox.MaxPoint = glm::vec3(transform * glm::vec4(BoundingBox.MaxPoint, 1.0f));

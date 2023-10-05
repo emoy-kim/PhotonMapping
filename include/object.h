@@ -70,6 +70,7 @@ public:
    [[nodiscard]] GLsizei getIndexNum() const { return static_cast<GLsizei>(IndexBuffer.size()); }
    [[nodiscard]] GLuint getTextureID(int index) const { return TextureID[index]; }
    [[nodiscard]] Rect getBoundingBox() const { return BoundingBox; }
+   [[nodiscard]] glm::vec4 getEmissionColor() const { return EmissionColor; }
 
    template<typename T>
    [[nodiscard]] GLuint addCustomBufferObject(const std::string& name, int data_size)
