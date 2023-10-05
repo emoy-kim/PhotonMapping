@@ -35,7 +35,6 @@ uniform int UseTexture;
 uniform int UseLight;
 uniform int LightNum;
 
-in vec4 position_in_wc;
 in vec3 position_in_ec;
 in vec3 normal_in_ec;
 in vec2 tex_coord;
