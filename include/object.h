@@ -4,8 +4,8 @@
 
 struct Rect
 {
-   glm::vec3 MinPoint;
-   glm::vec3 MaxPoint;
+   alignas(16) glm::vec3 MinPoint;
+   alignas(16) glm::vec3 MaxPoint;
 
    Rect() : MinPoint(), MaxPoint() {}
 };
@@ -66,8 +66,8 @@ public:
    [[nodiscard]] GLuint getVBO() const { return VBO; }
    [[nodiscard]] GLuint getIBO() const { return IBO; }
    [[nodiscard]] GLenum getDrawMode() const { return DrawMode; }
+   [[nodiscard]] GLsizei getIndexNum() const { return IndexNum; }
    [[nodiscard]] GLsizei getVertexNum() const { return VerticesCount; }
-   [[nodiscard]] GLsizei getIndexNum() const { return static_cast<GLsizei>(IndexBuffer.size()); }
    [[nodiscard]] GLuint getTextureID(int index) const { return TextureID[index]; }
    [[nodiscard]] Rect getBoundingBox() const { return BoundingBox; }
    [[nodiscard]] glm::vec4 getEmissionColor() const { return EmissionColor; }
@@ -89,6 +89,7 @@ protected:
    GLuint VBO;
    GLuint IBO;
    GLenum DrawMode;
+   GLsizei IndexNum;
    GLsizei VerticesCount;
    Rect BoundingBox;
    std::vector<GLuint> TextureID;

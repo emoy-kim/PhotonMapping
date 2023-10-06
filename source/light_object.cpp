@@ -43,7 +43,6 @@ void LightGL::setObjectWithTransform(
    std::vector<glm::vec2> textures;
    readObjectFile( vertices, normals, textures, obj_file_path );
 
-   DataBuffer.clear();
    const bool normals_exist = !normals.empty();
    const glm::mat4 vector_transform = glm::transpose( glm::inverse( transform ) );
    for (uint i = 0; i < vertices.size(); ++i) {
@@ -84,4 +83,6 @@ void LightGL::setObjectWithTransform(
    SpotlightDirection = normals[0];
    BoundingBox.MinPoint = glm::vec3(transform * glm::vec4(BoundingBox.MinPoint, 1.0f));
    BoundingBox.MaxPoint = glm::vec3(transform * glm::vec4(BoundingBox.MaxPoint, 1.0f));
+   DataBuffer.clear();
+   IndexBuffer.clear();
 }

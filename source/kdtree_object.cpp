@@ -21,7 +21,6 @@ void KdtreeGL::setObject(
    std::vector<glm::vec2> textures;
    readObjectFile( Vertices, normals, textures, obj_file_path );
 
-   DataBuffer.clear();
    const bool normals_exist = !normals.empty();
    const bool textures_exist = !textures.empty();
    for (uint i = 0; i < Vertices.size(); ++i) {
@@ -47,6 +46,8 @@ void KdtreeGL::setObject(
    if (normals_exist) prepareNormal();
    if (textures_exist) prepareTexture( normals_exist );
    prepareIndexBuffer();
+   DataBuffer.clear();
+   IndexBuffer.clear();
 
    if (!mtl_file_path.empty()) setMaterial( mtl_file_path );
 }

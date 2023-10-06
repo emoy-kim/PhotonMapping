@@ -2,7 +2,7 @@
 
 ObjectGL::ObjectGL() :
    Type( TYPE::ARBITRARY ), MaterialType( MATERIAL_TYPE::LAMBERT ), VAO( 0 ), VBO( 0 ), IBO( 0 ), DrawMode( 0 ),
-   VerticesCount( 0 ), BoundingBox(), EmissionColor( 0.1f, 0.1f, 0.1f, 1.0f ),
+   IndexNum( 0 ), VerticesCount( 0 ), BoundingBox(), EmissionColor( 0.1f, 0.1f, 0.1f, 1.0f ),
    AmbientReflectionColor( 0.2f, 0.2f, 0.2f, 1.0f ), DiffuseReflectionColor( 0.8f, 0.8f, 0.8f, 1.0f ),
    SpecularReflectionColor( 0.8f, 0.8f, 0.8f, 1.0f ), SpecularReflectionExponent( 16.0f ), RefractiveIndex( 1.0f )
 {
@@ -250,6 +250,7 @@ void ObjectGL::readObjectFile(
    normals = std::move( normal_buffer );
    if (found_textures && vertex_indices.size() == texture_indices.size()) textures = std::move( texture_buffer );
    IndexBuffer = std::move( vertex_indices );
+   IndexNum = static_cast<GLsizei>(IndexBuffer.size());
    BoundingBox.MinPoint = min_point;
    BoundingBox.MaxPoint = max_point;
 }
@@ -314,7 +315,6 @@ void ObjectGL::setObject(
    std::vector<glm::vec2> textures;
    readObjectFile( vertices, normals, textures, obj_file_path );
 
-   DataBuffer.clear();
    const bool normals_exist = !normals.empty();
    const bool textures_exist = !textures.empty();
    for (uint i = 0; i < vertices.size(); ++i) {
@@ -340,6 +340,8 @@ void ObjectGL::setObject(
    if (normals_exist) prepareNormal();
    if (textures_exist) prepareTexture( normals_exist );
    prepareIndexBuffer();
+   DataBuffer.clear();
+   IndexBuffer.clear();
 
    if (!mtl_file_path.empty()) setMaterial( mtl_file_path );
 }
@@ -358,7 +360,6 @@ void ObjectGL::setObjectWithTransform(
    std::vector<glm::vec2> textures;
    readObjectFile( vertices, normals, textures, obj_file_path );
 
-   DataBuffer.clear();
    const bool normals_exist = !normals.empty();
    const bool textures_exist = !textures.empty();
    const glm::mat4 vector_transform = glm::transpose( glm::inverse( transform ) );
@@ -387,6 +388,8 @@ void ObjectGL::setObjectWithTransform(
    if (normals_exist) prepareNormal();
    if (textures_exist) prepareTexture( normals_exist );
    prepareIndexBuffer();
+   DataBuffer.clear();
+   IndexBuffer.clear();
 
    if (!mtl_file_path.empty()) setMaterial( mtl_file_path );
 }
