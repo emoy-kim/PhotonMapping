@@ -1,12 +1,19 @@
 #include "photon_map.h"
 
-PhotonMapGL::PhotonMapGL() : LightNum( 0 ), AreaLightBuffer( 0 )
+PhotonMapGL::PhotonMapGL() :
+   LightNum( 0 ), PhotonBuffer( 0 ), AreaLightBuffer( 0 ), WorldBoundsBuffer( 0 ), ObjectVerticesBuffer( 0 ),
+   ObjectNormalsBuffer( 0 ), ObjectVertexSizeBuffer( 0 )
 {
 }
 
 PhotonMapGL::~PhotonMapGL()
 {
+   if (PhotonBuffer != 0) glDeleteBuffers( 1, &PhotonBuffer );
    if (AreaLightBuffer != 0) glDeleteBuffers( 1, &AreaLightBuffer );
+   if (WorldBoundsBuffer != 0) glDeleteBuffers( 1, &WorldBoundsBuffer );
+   if (ObjectVerticesBuffer != 0) glDeleteBuffers( 1, &ObjectVerticesBuffer );
+   if (ObjectNormalsBuffer != 0) glDeleteBuffers( 1, &ObjectNormalsBuffer );
+   if (ObjectVertexSizeBuffer != 0) glDeleteBuffers( 1, &ObjectVertexSizeBuffer );
 }
 
 void PhotonMapGL::separateObjectFile(
@@ -138,22 +145,33 @@ void PhotonMapGL::setObjects(const std::vector<object_t>& objects)
 
 void PhotonMapGL::prepareBuilding()
 {
-   assert( LightNum > 0 && AreaLightBuffer == 0 );
+   assert( LightNum > 0 && PhotonBuffer == 0 && AreaLightBuffer == 0 && WorldBoundsBuffer == 0 );
 
+   // Currently, consider the only one area light.
    const auto light = std::dynamic_pointer_cast<LightGL>(Objects[LightIndices[0]]);
    const auto& areas = light->getAreas();
    const auto& triangles = light->getTriangles();
    const glm::vec3 normal = light->getNormal();
    const glm::vec3 emission = light->getEmissionColor();
-   const auto size = static_cast<int>(triangles.size());
    std::vector<AreaLight> area_lights;
-   for (int i = 0; i < size; ++i) {
+   for (size_t i = 0; i < triangles.size(); ++i) {
       area_lights.emplace_back( areas[i], emission, normal, triangles[i] );
    }
 
    glCreateBuffers( 1, &AreaLightBuffer );
-   glNamedBufferStorage( AreaLightBuffer, sizeof( AreaLight ), nullptr, GL_DYNAMIC_STORAGE_BIT );
-   glNamedBufferSubData( AreaLightBuffer, 0, static_cast<GLsizei>(sizeof( AreaLight )), area_lights.data() );
+   auto buffer_size = static_cast<int>(sizeof( AreaLight ));
+   glNamedBufferStorage( AreaLightBuffer, buffer_size, nullptr, GL_DYNAMIC_STORAGE_BIT );
+   glNamedBufferSubData( AreaLightBuffer, 0, buffer_size, area_lights.data() );
+
+   glCreateBuffers( 1, &WorldBoundsBuffer );
+   buffer_size = static_cast<int>(WorldBounds.size() * sizeof( Rect ));
+   glNamedBufferStorage( WorldBoundsBuffer, buffer_size, nullptr, GL_DYNAMIC_STORAGE_BIT );
+   glNamedBufferSubData( WorldBoundsBuffer, 0, buffer_size, WorldBounds.data() );
+
+
+   glCreateBuffers( 1, &PhotonBuffer );
+   buffer_size = static_cast<int>(MaxGlobalPhotonNum * sizeof( Photon ));
+   glNamedBufferStorage( PhotonBuffer, buffer_size, nullptr, GL_DYNAMIC_STORAGE_BIT );
 }
 
 #if 0

@@ -6,7 +6,7 @@ struct Photon
 {
    vec3 Power;
    vec3 Position;
-   vec3 IncomingDirection;
+   vec2 IncomingDirection;
 };
 
 struct AreaLight
@@ -17,8 +17,15 @@ struct AreaLight
    vec3 Vertices[3];
 };
 
+struct Rect
+{
+   vec3 MinPoint;
+   vec3 MaxPoint;
+};
+
 layout (binding = 0, std430) buffer Photons { Photon photons[]; };
 layout (binding = 1, std430) buffer Lights { AreaLight lights[]; };
+layout (binding = 2, std430) buffer WorldBounds { Rect world_bounds[]; };
 
 uniform uint Seed;
 uniform int MaxGlobalPhotonNum;

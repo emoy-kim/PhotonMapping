@@ -45,6 +45,7 @@ public:
    void setObjects(const std::vector<object_t>& objects);
    void prepareBuilding();
    [[nodiscard]] int getLightNum() const { return LightNum; }
+   [[nodiscard]] int getObjectNum() const { return static_cast<int>(Objects.size()); }
    [[nodiscard]] const LightGL* getLight(int index) const
    {
       const auto* object = Objects[LightIndices[index]].get();
@@ -53,7 +54,9 @@ public:
    }
    [[nodiscard]] const std::vector<glm::mat4>& getWorldMatrices() const { return ToWorlds; }
    [[nodiscard]] const std::vector<std::shared_ptr<ObjectGL>>& getObjects() const { return Objects; }
+   [[nodiscard]] GLuint getPhotonBuffer() const { return PhotonBuffer; }
    [[nodiscard]] GLuint getAreaLightBuffer() const { return AreaLightBuffer; }
+   [[nodiscard]] GLuint getWorldBoundsBuffer() const { return WorldBoundsBuffer; }
 
 private:
    int LightNum;
@@ -63,7 +66,12 @@ private:
    std::vector<std::shared_ptr<ObjectGL>> Objects;
    std::vector<glm::mat4> ToWorlds;
    std::vector<Rect> WorldBounds;
+   GLuint PhotonBuffer;
    GLuint AreaLightBuffer;
+   GLuint WorldBoundsBuffer;
+   GLuint ObjectVerticesBuffer;
+   GLuint ObjectNormalsBuffer;
+   GLuint ObjectVertexSizeBuffer;
 
    [[nodiscard]] static bool isNumber(const std::string& n)
    {
