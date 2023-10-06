@@ -60,6 +60,12 @@ public:
          CustomBuffers.erase( it );
       }
    }
+   void clear()
+   {
+      Vertices.clear();
+      Normals.clear();
+      Textures.clear();
+   }
    [[nodiscard]] bool isLight() const { return Type == TYPE::LIGHT; }
    [[nodiscard]] int getObjectType() const { return static_cast<int>(Type); }
    [[nodiscard]] GLuint getVAO() const { return VAO; }
@@ -95,6 +101,9 @@ protected:
    std::vector<GLuint> TextureID;
    std::vector<GLfloat> DataBuffer;
    std::vector<GLuint> IndexBuffer;
+   std::vector<glm::vec3> Vertices;
+   std::vector<glm::vec3> Normals;
+   std::vector<glm::vec2> Textures;
    std::map<std::string, GLuint> CustomBuffers;
    glm::vec4 EmissionColor;
    glm::vec4 AmbientReflectionColor; // It is usually set to the same color with DiffuseReflectionColor.
@@ -114,12 +123,7 @@ protected:
       const std::vector<glm::vec3>& vertices,
       const std::vector<GLuint>& vertex_indices
    );
-   void readObjectFile(
-      std::vector<glm::vec3>& vertices,
-      std::vector<glm::vec3>& normals,
-      std::vector<glm::vec2>& textures,
-      const std::string& file_path
-   );
+   void readObjectFile(const std::string& file_path);
    void setMaterial(const std::string& mtl_file_path);
    [[nodiscard]] static bool isNumber(const std::string& n)
    {

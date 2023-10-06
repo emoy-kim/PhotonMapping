@@ -109,5 +109,4 @@ private:
    std::array<GLuint, 2> MidReferences;
    std::vector<GLuint> Reference;
    std::vector<GLuint> Buffer;
-   std::vector<glm::vec3> Vertices;
 };

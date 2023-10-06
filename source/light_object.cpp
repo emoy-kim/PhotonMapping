@@ -39,22 +39,20 @@ void LightGL::setObjectWithTransform(
 {
    Type = type;
    DrawMode = draw_mode;
-   std::vector<glm::vec3> vertices, normals;
-   std::vector<glm::vec2> textures;
-   readObjectFile( vertices, normals, textures, obj_file_path );
+   readObjectFile( obj_file_path );
 
-   const bool normals_exist = !normals.empty();
+   const bool normals_exist = !Normals.empty();
    const glm::mat4 vector_transform = glm::transpose( glm::inverse( transform ) );
-   for (uint i = 0; i < vertices.size(); ++i) {
-      vertices[i] = glm::vec3(transform * glm::vec4(vertices[i], 1.0f));
-      DataBuffer.emplace_back( vertices[i].x );
-      DataBuffer.emplace_back( vertices[i].y );
-      DataBuffer.emplace_back( vertices[i].z );
+   for (size_t i = 0; i < Vertices.size(); ++i) {
+      Vertices[i] = glm::vec3(transform * glm::vec4(Vertices[i], 1.0f));
+      DataBuffer.emplace_back( Vertices[i].x );
+      DataBuffer.emplace_back( Vertices[i].y );
+      DataBuffer.emplace_back( Vertices[i].z );
       if (normals_exist) {
-         normals[i] = glm::normalize( glm::vec3(vector_transform * glm::vec4(normals[i], 0.0f)) );
-         DataBuffer.emplace_back( normals[i].x );
-         DataBuffer.emplace_back( normals[i].y );
-         DataBuffer.emplace_back( normals[i].z );
+         Normals[i] = glm::normalize( glm::vec3(vector_transform * glm::vec4(Normals[i], 0.0f)) );
+         DataBuffer.emplace_back( Normals[i].x );
+         DataBuffer.emplace_back( Normals[i].y );
+         DataBuffer.emplace_back( Normals[i].z );
       }
       VerticesCount++;
    }
@@ -65,7 +63,7 @@ void LightGL::setObjectWithTransform(
    if (normals_exist) prepareNormal();
    prepareIndexBuffer();
 
-   assert( vertices.size() == 4 );
+   assert( Vertices.size() == 4 );
 
    if (!mtl_file_path.empty()) setMaterial( mtl_file_path );
 
@@ -76,11 +74,11 @@ void LightGL::setObjectWithTransform(
       const GLuint n0 = IndexBuffer[i];
       const GLuint n1 = IndexBuffer[i + 1];
       const GLuint n2 = IndexBuffer[i + 2];
-      const glm::vec3 normal = glm::cross( vertices[n1] - vertices[n0], vertices[n2] - vertices[n0] );
+      const glm::vec3 normal = glm::cross( Vertices[n1] - Vertices[n0], Vertices[n2] - Vertices[n0] );
       Areas.emplace_back( glm::length( normal ) * 0.5f );
-      Triangles.emplace_back( std::array<glm::vec3, 3>{ vertices[n0], vertices[n1], vertices[n2] } );
+      Triangles.emplace_back( std::array<glm::vec3, 3>{ Vertices[n0], Vertices[n1], Vertices[n2] } );
    }
-   SpotlightDirection = normals[0];
+   SpotlightDirection = Normals[0];
    BoundingBox.MinPoint = glm::vec3(transform * glm::vec4(BoundingBox.MinPoint, 1.0f));
    BoundingBox.MaxPoint = glm::vec3(transform * glm::vec4(BoundingBox.MaxPoint, 1.0f));
    DataBuffer.clear();

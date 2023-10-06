@@ -183,12 +183,7 @@ void ObjectGL::findNormals(
    for (auto& n : normals) n = glm::normalize( n );
 }
 
-void ObjectGL::readObjectFile(
-   std::vector<glm::vec3>& vertices,
-   std::vector<glm::vec3>& normals,
-   std::vector<glm::vec2>& textures,
-   const std::string& file_path
-)
+void ObjectGL::readObjectFile(const std::string& file_path)
 {
    std::ifstream file(file_path);
 
@@ -246,9 +241,9 @@ void ObjectGL::readObjectFile(
 
    if (!found_normals) findNormals( normal_buffer, vertex_buffer, vertex_indices );
 
-   vertices = std::move( vertex_buffer );
-   normals = std::move( normal_buffer );
-   if (found_textures && vertex_indices.size() == texture_indices.size()) textures = std::move( texture_buffer );
+   Vertices = std::move( vertex_buffer );
+   Normals = std::move( normal_buffer );
+   if (found_textures && vertex_indices.size() == texture_indices.size()) Textures = std::move( texture_buffer );
    IndexBuffer = std::move( vertex_indices );
    IndexNum = static_cast<GLsizei>(IndexBuffer.size());
    BoundingBox.MinPoint = min_point;
@@ -311,24 +306,22 @@ void ObjectGL::setObject(
 {
    Type = type;
    DrawMode = draw_mode;
-   std::vector<glm::vec3> vertices, normals;
-   std::vector<glm::vec2> textures;
-   readObjectFile( vertices, normals, textures, obj_file_path );
+   readObjectFile( obj_file_path );
 
-   const bool normals_exist = !normals.empty();
-   const bool textures_exist = !textures.empty();
-   for (uint i = 0; i < vertices.size(); ++i) {
-      DataBuffer.emplace_back( vertices[i].x );
-      DataBuffer.emplace_back( vertices[i].y );
-      DataBuffer.emplace_back( vertices[i].z );
+   const bool normals_exist = !Normals.empty();
+   const bool textures_exist = !Textures.empty();
+   for (size_t i = 0; i < Vertices.size(); ++i) {
+      DataBuffer.emplace_back( Vertices[i].x );
+      DataBuffer.emplace_back( Vertices[i].y );
+      DataBuffer.emplace_back( Vertices[i].z );
       if (normals_exist) {
-         DataBuffer.emplace_back( normals[i].x );
-         DataBuffer.emplace_back( normals[i].y );
-         DataBuffer.emplace_back( normals[i].z );
+         DataBuffer.emplace_back( Normals[i].x );
+         DataBuffer.emplace_back( Normals[i].y );
+         DataBuffer.emplace_back( Normals[i].z );
       }
       if (textures_exist) {
-         DataBuffer.emplace_back( textures[i].x );
-         DataBuffer.emplace_back( textures[i].y );
+         DataBuffer.emplace_back( Textures[i].x );
+         DataBuffer.emplace_back( Textures[i].y );
       }
       VerticesCount++;
    }
@@ -356,27 +349,25 @@ void ObjectGL::setObjectWithTransform(
 {
    Type = type;
    DrawMode = draw_mode;
-   std::vector<glm::vec3> vertices, normals;
-   std::vector<glm::vec2> textures;
-   readObjectFile( vertices, normals, textures, obj_file_path );
+   readObjectFile( obj_file_path );
 
-   const bool normals_exist = !normals.empty();
-   const bool textures_exist = !textures.empty();
+   const bool normals_exist = !Normals.empty();
+   const bool textures_exist = !Textures.empty();
    const glm::mat4 vector_transform = glm::transpose( glm::inverse( transform ) );
-   for (uint i = 0; i < vertices.size(); ++i) {
-      const glm::vec3 p = glm::vec3(transform * glm::vec4(vertices[i], 1.0f));
+   for (size_t i = 0; i < Vertices.size(); ++i) {
+      const glm::vec3 p = glm::vec3(transform * glm::vec4(Vertices[i], 1.0f));
       DataBuffer.emplace_back( p.x );
       DataBuffer.emplace_back( p.y );
       DataBuffer.emplace_back( p.z );
       if (normals_exist) {
-         const glm::vec3 n = glm::normalize( glm::vec3(vector_transform * glm::vec4(normals[i], 0.0f)) );
+         const glm::vec3 n = glm::normalize( glm::vec3(vector_transform * glm::vec4(Normals[i], 0.0f)) );
          DataBuffer.emplace_back( n.x );
          DataBuffer.emplace_back( n.y );
          DataBuffer.emplace_back( n.z );
       }
       if (textures_exist) {
-         DataBuffer.emplace_back( textures[i].x );
-         DataBuffer.emplace_back( textures[i].y );
+         DataBuffer.emplace_back( Textures[i].x );
+         DataBuffer.emplace_back( Textures[i].y );
       }
       VerticesCount++;
    }
