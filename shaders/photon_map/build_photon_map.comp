@@ -26,6 +26,9 @@ struct Rect
 layout (binding = 0, std430) buffer Photons { Photon photons[]; };
 layout (binding = 1, std430) buffer Lights { AreaLight lights[]; };
 layout (binding = 2, std430) buffer WorldBounds { Rect world_bounds[]; };
+layout (binding = 3, std430) buffer Vertices { float vertices[]; };
+layout (binding = 4, std430) buffer Normals { float normals[]; };
+layout (binding = 5, std430) buffer VertexSizes { float vertex_sizes[]; };
 
 uniform uint Seed;
 uniform int MaxGlobalPhotonNum;

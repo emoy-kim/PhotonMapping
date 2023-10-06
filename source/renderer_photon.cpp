@@ -23,6 +23,9 @@ void RendererGL::createPhotonMap()
    glBindBufferBase( GL_SHADER_STORAGE_BUFFER, 0, PhotonMap->getPhotonBuffer() );
    glBindBufferBase( GL_SHADER_STORAGE_BUFFER, 1, PhotonMap->getAreaLightBuffer() );
    glBindBufferBase( GL_SHADER_STORAGE_BUFFER, 2, PhotonMap->getWorldBoundsBuffer() );
+   glBindBufferBase( GL_SHADER_STORAGE_BUFFER, 3, PhotonMap->getObjectVerticesBuffer() );
+   glBindBufferBase( GL_SHADER_STORAGE_BUFFER, 4, PhotonMap->getObjectNormalsBuffer() );
+   glBindBufferBase( GL_SHADER_STORAGE_BUFFER, 5, PhotonMap->getObjectVertexSizeBuffer() );
    glDispatchCompute( PhotonMapGL::ThreadBlockNum, 1, 1 );
    glMemoryBarrier( GL_SHADER_STORAGE_BARRIER_BIT );
 }

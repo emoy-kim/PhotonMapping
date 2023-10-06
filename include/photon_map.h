@@ -57,6 +57,9 @@ public:
    [[nodiscard]] GLuint getPhotonBuffer() const { return PhotonBuffer; }
    [[nodiscard]] GLuint getAreaLightBuffer() const { return AreaLightBuffer; }
    [[nodiscard]] GLuint getWorldBoundsBuffer() const { return WorldBoundsBuffer; }
+   [[nodiscard]] GLuint getObjectVerticesBuffer() const { return ObjectVerticesBuffer; }
+   [[nodiscard]] GLuint getObjectNormalsBuffer() const { return ObjectNormalsBuffer; }
+   [[nodiscard]] GLuint getObjectVertexSizeBuffer() const { return ObjectVertexSizeBuffer; }
 
 private:
    int LightNum;

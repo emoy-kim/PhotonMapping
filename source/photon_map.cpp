@@ -146,6 +146,7 @@ void PhotonMapGL::setObjects(const std::vector<object_t>& objects)
 void PhotonMapGL::prepareBuilding()
 {
    assert( LightNum > 0 && PhotonBuffer == 0 && AreaLightBuffer == 0 && WorldBoundsBuffer == 0 );
+   assert( ObjectVerticesBuffer == 0 && ObjectNormalsBuffer == 0 && ObjectVertexSizeBuffer == 0 );
 
    // Currently, consider the only one area light.
    const auto light = std::dynamic_pointer_cast<LightGL>(Objects[LightIndices[0]]);
@@ -158,8 +159,31 @@ void PhotonMapGL::prepareBuilding()
       area_lights.emplace_back( areas[i], emission, normal, triangles[i] );
    }
 
+   std::vector<int> vertex_sizes;
+   std::vector<GLfloat> vertex_buffer, normal_buffer;
+   for (const auto& object : Objects) {
+      const auto& vertices = object->getVertices();
+      const auto& normals = object->getNormals();
+
+      assert( vertices.size() == normals.size() );
+
+      for (size_t i = 0; i < vertices.size(); ++i) {
+         vertex_buffer.emplace_back( vertices[i].x );
+         vertex_buffer.emplace_back( vertices[i].y );
+         vertex_buffer.emplace_back( vertices[i].z );
+         normal_buffer.emplace_back( normals[i].x );
+         normal_buffer.emplace_back( normals[i].y );
+         normal_buffer.emplace_back( normals[i].z );
+      }
+      vertex_sizes.emplace_back( static_cast<int>(vertices.size()) );
+   }
+
+   glCreateBuffers( 1, &PhotonBuffer );
+   auto buffer_size = static_cast<int>(MaxGlobalPhotonNum * sizeof( Photon ));
+   glNamedBufferStorage( PhotonBuffer, buffer_size, nullptr, GL_DYNAMIC_STORAGE_BIT );
+
    glCreateBuffers( 1, &AreaLightBuffer );
-   auto buffer_size = static_cast<int>(sizeof( AreaLight ));
+   buffer_size = static_cast<int>(sizeof( AreaLight ));
    glNamedBufferStorage( AreaLightBuffer, buffer_size, nullptr, GL_DYNAMIC_STORAGE_BIT );
    glNamedBufferSubData( AreaLightBuffer, 0, buffer_size, area_lights.data() );
 
@@ -168,10 +192,19 @@ void PhotonMapGL::prepareBuilding()
    glNamedBufferStorage( WorldBoundsBuffer, buffer_size, nullptr, GL_DYNAMIC_STORAGE_BIT );
    glNamedBufferSubData( WorldBoundsBuffer, 0, buffer_size, WorldBounds.data() );
 
+   glCreateBuffers( 1, &ObjectVerticesBuffer );
+   buffer_size = static_cast<int>(sizeof( GLfloat ) * vertex_buffer.size());
+   glNamedBufferStorage( ObjectVerticesBuffer, buffer_size, nullptr, GL_DYNAMIC_STORAGE_BIT );
+   glNamedBufferSubData( ObjectVerticesBuffer, 0, buffer_size, vertex_buffer.data() );
 
-   glCreateBuffers( 1, &PhotonBuffer );
-   buffer_size = static_cast<int>(MaxGlobalPhotonNum * sizeof( Photon ));
-   glNamedBufferStorage( PhotonBuffer, buffer_size, nullptr, GL_DYNAMIC_STORAGE_BIT );
+   glCreateBuffers( 1, &ObjectNormalsBuffer );
+   glNamedBufferStorage( ObjectNormalsBuffer, buffer_size, nullptr, GL_DYNAMIC_STORAGE_BIT );
+   glNamedBufferSubData( ObjectNormalsBuffer, 0, buffer_size, normal_buffer.data() );
+
+   glCreateBuffers( 1, &ObjectVertexSizeBuffer );
+   buffer_size = static_cast<int>(sizeof( int ) * Objects.size());
+   glNamedBufferStorage( ObjectVertexSizeBuffer, buffer_size, nullptr, GL_DYNAMIC_STORAGE_BIT );
+   glNamedBufferSubData( ObjectVertexSizeBuffer, 0, buffer_size, vertex_sizes.data() );
 }
 
 #if 0
