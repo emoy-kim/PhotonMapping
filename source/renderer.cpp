@@ -83,6 +83,22 @@ void RendererGL::writeFrame() const
    delete [] buffer;
 }
 
+void RendererGL::writeTexture(GLuint texture_id, int width, int height, const std::string& name)
+{
+   const int size = width * height * 4;
+   auto* buffer = new uint8_t[size];
+   glGetTextureImage( texture_id, 0, GL_BGRA, GL_UNSIGNED_BYTE, size, buffer );
+   const std::string description = name.empty() ? std::string() : "(" + name + ")";
+   const std::string file_name = "../" + std::to_string( texture_id ) + description + ".png";
+   FIBITMAP* image = FreeImage_ConvertFromRawBits(
+      buffer, width, height, width * 4, 32,
+      FI_RGBA_RED_MASK, FI_RGBA_GREEN_MASK, FI_RGBA_BLUE_MASK, false
+   );
+   FreeImage_Save( FIF_PNG, image, file_name.c_str() );
+   FreeImage_Unload( image );
+   delete [] buffer;
+}
+
 void RendererGL::cleanup(GLFWwindow* window)
 {
    glfwSetWindowShouldClose( window, GLFW_TRUE );
@@ -235,6 +251,9 @@ void RendererGL::setObjects()
       )
    };
    PhotonMap->setObjects( objects );
+
+   Canvas = std::make_unique<CanvasGL>();
+   Canvas->setCanvas( FrameWidth, FrameHeight, GL_RGBA8 );
 }
 
 void RendererGL::setShaders() const

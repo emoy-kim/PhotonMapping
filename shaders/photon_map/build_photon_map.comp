@@ -33,6 +33,7 @@ layout (binding = 5, std430) buffer VertexSizes { float vertex_sizes[]; };
 uniform uint Seed;
 uniform int MaxGlobalPhotonNum;
 uniform int MaxDepth;
+uniform int ObjectNum;
 
 const float zero = 0.0f;
 const float one = 1.0f;
@@ -78,8 +79,53 @@ vec3 getSampleRayFromLight(inout vec3 ray_origin, inout vec3 ray_direction)
    return lights[light_index].Emission / pdf * abs( dot( ray_direction, normal ) );
 }
 
-bool findIntersection()
+bool intersectWithBox(in vec3 ray_origin, in vec3 ray_direction, in vec3 min_point, in vec3 max_point)
 {
+   float exit = one / zero;
+   float enter = -one / zero;
+   if (abs( ray_direction.x ) > 0.001f) {
+      float t_min = (min_point.x - ray_origin.x) / ray_direction.x;
+      float t_max = (max_point.x - ray_origin.x) / ray_direction.x;
+      float t_enter = min( t_min, t_max );
+      float t_exit = max( t_min, t_max );
+      if (t_enter > enter) enter = t_enter;
+      if (t_exit < exit) exit = t_exit;
+      if (enter > exit || exit < zero) return false;
+   }
+   else if (ray_origin.x < min_point.x || max_point.x < ray_origin.x) return false;
+
+   if (abs( ray_direction.y ) > 0.001f) {
+      float t_min = (min_point.y - ray_origin.y) / ray_direction.y;
+      float t_max = (max_point.y - ray_origin.y) / ray_direction.y;
+      float t_enter = min( t_min, t_max );
+      float t_exit = max( t_min, t_max );
+      if (t_enter > enter) enter = t_enter;
+      if (t_exit < exit) exit = t_exit;
+      if (enter > exit || exit < zero) return false;
+   }
+   else if (ray_origin.y < min_point.y || max_point.y < ray_origin.y) return false;
+
+   if (abs( ray_direction.z ) > 0.001f) {
+      float t_min = (min_point.z - ray_origin.z) / ray_direction.z;
+      float t_max = (max_point.z - ray_origin.z) / ray_direction.z;
+      float t_enter = min( t_min, t_max );
+      float t_exit = max( t_min, t_max );
+      if (t_enter > enter) enter = t_enter;
+      if (t_exit < exit) exit = t_exit;
+      if (enter > exit || exit < zero) return false;
+   }
+   else if (ray_origin.z < min_point.z || max_point.z < ray_origin.z) return false;
+
+   //distance = enter > zero ? enter : exit;
+   return true;
+}
+
+bool findIntersection(in vec3 ray_origin, in vec3 ray_direction)
+{
+   for (int i = 0; i < ObjectNum; ++i) {
+      if (!intersectWithBox( ray_origin, ray_direction, world_bounds[i].MinPoint, world_bounds[i].MaxPoint )) continue;
+
+   }
    return false;
 }
 
@@ -92,7 +138,7 @@ void main()
       vec3 power = getSampleRayFromLight( ray_origin, ray_direction );
       for (int i = 0; i < MaxDepth; ++i) {
          if (any( lessThan( power, vec3(zero) ) )) break;
-         if (!findIntersection()) break;
+         if (!findIntersection( ray_origin, ray_direction )) break;
 
 
       }

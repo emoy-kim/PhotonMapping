@@ -20,6 +20,7 @@ void RendererGL::createPhotonMap()
    PhotonMapBuilder.BuildPhotonMap->uniform1ui( "Seed", seed[0] );
    PhotonMapBuilder.BuildPhotonMap->uniform1i( "MaxGlobalPhotonNum", PhotonMapGL::MaxGlobalPhotonNum );
    PhotonMapBuilder.BuildPhotonMap->uniform1i( "MaxDepth", PhotonMapGL::MaxDepth );
+   PhotonMapBuilder.BuildPhotonMap->uniform1i( "ObjectNum", PhotonMap->getObjectNum() );
    glBindBufferBase( GL_SHADER_STORAGE_BUFFER, 0, PhotonMap->getPhotonBuffer() );
    glBindBufferBase( GL_SHADER_STORAGE_BUFFER, 1, PhotonMap->getAreaLightBuffer() );
    glBindBufferBase( GL_SHADER_STORAGE_BUFFER, 2, PhotonMap->getWorldBoundsBuffer() );
