@@ -7,6 +7,7 @@
 #pragma once
 
 #include "base.h"
+#include "canvas.h"
 #include "photon_map.h"
 #include "kdtree_shader.h"
 #include "photon_map_shader.h"
@@ -96,6 +97,7 @@ private:
    std::unique_ptr<CameraGL> MainCamera;
    std::unique_ptr<ShaderGL> SceneShader;
    std::unique_ptr<PhotonMapGL> PhotonMap;
+   std::unique_ptr<CanvasGL> Canvas;
    KdtreeBuild KdtreeBuilder;
    PhotonMapBuild PhotonMapBuilder;
 
@@ -104,6 +106,7 @@ private:
    void registerCallbacks() const;
    void initialize();
    void writeFrame() const;
+   static void writeTexture(GLuint texture_id, int width, int height, const std::string& name = {});
    static void printOpenGLInformation();
    static void cleanup(GLFWwindow* window);
    static void keyboard(GLFWwindow* window, int key, int scancode, int action, int mods);
