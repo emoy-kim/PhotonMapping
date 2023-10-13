@@ -77,6 +77,7 @@ public:
    [[nodiscard]] GLuint getTextureID(int index) const { return TextureID[index]; }
    [[nodiscard]] Rect getBoundingBox() const { return BoundingBox; }
    [[nodiscard]] glm::vec4 getEmissionColor() const { return EmissionColor; }
+   [[nodiscard]] const std::vector<GLuint>& getIndices() const { return IndexBuffer; }
    [[nodiscard]] const std::vector<glm::vec3>& getVertices() const { return Vertices; }
    [[nodiscard]] const std::vector<glm::vec3>& getNormals() const { return Normals; }
 

@@ -59,7 +59,9 @@ public:
    [[nodiscard]] GLuint getWorldBoundsBuffer() const { return WorldBoundsBuffer; }
    [[nodiscard]] GLuint getObjectVerticesBuffer() const { return ObjectVerticesBuffer; }
    [[nodiscard]] GLuint getObjectNormalsBuffer() const { return ObjectNormalsBuffer; }
+   [[nodiscard]] GLuint getObjectIndicesBuffer() const { return ObjectIndicesBuffer; }
    [[nodiscard]] GLuint getObjectVertexSizeBuffer() const { return ObjectVertexSizeBuffer; }
+   [[nodiscard]] GLuint getObjectIndexSizeBuffer() const { return ObjectIndexSizeBuffer; }
 
 private:
    int LightNum;
@@ -74,7 +76,9 @@ private:
    GLuint WorldBoundsBuffer;
    GLuint ObjectVerticesBuffer;
    GLuint ObjectNormalsBuffer;
+   GLuint ObjectIndicesBuffer;
    GLuint ObjectVertexSizeBuffer;
+   GLuint ObjectIndexSizeBuffer;
 
    [[nodiscard]] static bool isNumber(const std::string& n)
    {

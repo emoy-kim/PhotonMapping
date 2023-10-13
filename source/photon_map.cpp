@@ -2,7 +2,7 @@
 
 PhotonMapGL::PhotonMapGL() :
    LightNum( 0 ), PhotonBuffer( 0 ), AreaLightBuffer( 0 ), WorldBoundsBuffer( 0 ), ObjectVerticesBuffer( 0 ),
-   ObjectNormalsBuffer( 0 ), ObjectVertexSizeBuffer( 0 )
+   ObjectNormalsBuffer( 0 ), ObjectIndicesBuffer( 0 ), ObjectVertexSizeBuffer( 0 ), ObjectIndexSizeBuffer( 0 )
 {
 }
 
@@ -13,7 +13,9 @@ PhotonMapGL::~PhotonMapGL()
    if (WorldBoundsBuffer != 0) glDeleteBuffers( 1, &WorldBoundsBuffer );
    if (ObjectVerticesBuffer != 0) glDeleteBuffers( 1, &ObjectVerticesBuffer );
    if (ObjectNormalsBuffer != 0) glDeleteBuffers( 1, &ObjectNormalsBuffer );
+   if (ObjectIndicesBuffer != 0) glDeleteBuffers( 1, &ObjectIndicesBuffer );
    if (ObjectVertexSizeBuffer != 0) glDeleteBuffers( 1, &ObjectVertexSizeBuffer );
+   if (ObjectIndexSizeBuffer != 0) glDeleteBuffers( 1, &ObjectIndexSizeBuffer );
 }
 
 void PhotonMapGL::separateObjectFile(
@@ -159,9 +161,11 @@ void PhotonMapGL::prepareBuilding()
       area_lights.emplace_back( areas[i], emission, normal, triangles[i] );
    }
 
-   std::vector<int> vertex_sizes;
+   std::vector<GLuint> index_buffer;
+   std::vector<int> vertex_sizes, index_sizes;
    std::vector<GLfloat> vertex_buffer, normal_buffer;
    for (const auto& object : Objects) {
+      const auto& indices = object->getIndices();
       const auto& vertices = object->getVertices();
       const auto& normals = object->getNormals();
 
@@ -175,7 +179,9 @@ void PhotonMapGL::prepareBuilding()
          normal_buffer.emplace_back( normals[i].y );
          normal_buffer.emplace_back( normals[i].z );
       }
+      std::copy( indices.begin(), indices.end(), std::back_inserter( index_buffer ) );
       vertex_sizes.emplace_back( static_cast<int>(vertices.size()) );
+      index_sizes.emplace_back( static_cast<int>(indices.size()) );
    }
 
    glCreateBuffers( 1, &PhotonBuffer );
@@ -201,10 +207,19 @@ void PhotonMapGL::prepareBuilding()
    glNamedBufferStorage( ObjectNormalsBuffer, buffer_size, nullptr, GL_DYNAMIC_STORAGE_BIT );
    glNamedBufferSubData( ObjectNormalsBuffer, 0, buffer_size, normal_buffer.data() );
 
+   glCreateBuffers( 1, &ObjectIndicesBuffer );
+   buffer_size = static_cast<int>(sizeof( GLuint ) * index_buffer.size());
+   glNamedBufferStorage( ObjectIndicesBuffer, buffer_size, nullptr, GL_DYNAMIC_STORAGE_BIT );
+   glNamedBufferSubData( ObjectIndicesBuffer, 0, buffer_size, index_buffer.data() );
+
    glCreateBuffers( 1, &ObjectVertexSizeBuffer );
    buffer_size = static_cast<int>(sizeof( int ) * Objects.size());
    glNamedBufferStorage( ObjectVertexSizeBuffer, buffer_size, nullptr, GL_DYNAMIC_STORAGE_BIT );
    glNamedBufferSubData( ObjectVertexSizeBuffer, 0, buffer_size, vertex_sizes.data() );
+
+   glCreateBuffers( 1, &ObjectIndexSizeBuffer );
+   glNamedBufferStorage( ObjectIndexSizeBuffer, buffer_size, nullptr, GL_DYNAMIC_STORAGE_BIT );
+   glNamedBufferSubData( ObjectIndexSizeBuffer, 0, buffer_size, index_sizes.data() );
 }
 
 #if 0

@@ -28,7 +28,9 @@ layout (binding = 1, std430) buffer Lights { AreaLight lights[]; };
 layout (binding = 2, std430) buffer WorldBounds { Rect world_bounds[]; };
 layout (binding = 3, std430) buffer Vertices { float vertices[]; };
 layout (binding = 4, std430) buffer Normals { float normals[]; };
-layout (binding = 5, std430) buffer VertexSizes { float vertex_sizes[]; };
+layout (binding = 5, std430) buffer Indices { uint indices[]; };
+layout (binding = 6, std430) buffer VertexSizes { int vertex_sizes[]; };
+layout (binding = 7, std430) buffer IndexSizes { int index_sizes[]; };
 
 uniform uint Seed;
 uniform int MaxGlobalPhotonNum;
@@ -122,6 +124,7 @@ bool intersectWithBox(in vec3 ray_origin, in vec3 ray_direction, in vec3 min_poi
 
 bool findIntersection(in vec3 ray_origin, in vec3 ray_direction)
 {
+   float distance = one / zero;
    for (int i = 0; i < ObjectNum; ++i) {
       if (!intersectWithBox( ray_origin, ray_direction, world_bounds[i].MinPoint, world_bounds[i].MaxPoint )) continue;
 
