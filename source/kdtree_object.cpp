@@ -45,7 +45,6 @@ void KdtreeGL::setObject(
    if (textures_exist) prepareTexture( normals_exist );
    prepareIndexBuffer();
    DataBuffer.clear();
-   IndexBuffer.clear();
 
    if (!mtl_file_path.empty()) setMaterial( mtl_file_path );
 }
