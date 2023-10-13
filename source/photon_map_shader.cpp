@@ -6,4 +6,5 @@ void BuildPhotonMapShaderGL::setUniformLocations()
    addUniformLocation( "MaxGlobalPhotonNum" );
    addUniformLocation( "MaxDepth" );
    addUniformLocation( "ObjectNum" );
+   addUniformLocation( "WorldMatrices" );
 }

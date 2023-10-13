@@ -16,11 +16,13 @@ void RendererGL::createPhotonMap()
    std::vector<uint> seed(1);
    std::seed_seq sequence{ std::chrono::system_clock::now().time_since_epoch().count() };
    sequence.generate( seed.begin(), seed.end() );
+   const auto& to_worlds = PhotonMap->getWorldMatrices();
    glUseProgram( PhotonMapBuilder.BuildPhotonMap->getShaderProgram() );
    PhotonMapBuilder.BuildPhotonMap->uniform1ui( "Seed", seed[0] );
    PhotonMapBuilder.BuildPhotonMap->uniform1i( "MaxGlobalPhotonNum", PhotonMapGL::MaxGlobalPhotonNum );
    PhotonMapBuilder.BuildPhotonMap->uniform1i( "MaxDepth", PhotonMapGL::MaxDepth );
    PhotonMapBuilder.BuildPhotonMap->uniform1i( "ObjectNum", PhotonMap->getObjectNum() );
+   PhotonMapBuilder.BuildPhotonMap->uniformMat4fv( "WorldMatrices", to_worlds.size(), to_worlds.data() );
    glBindBufferBase( GL_SHADER_STORAGE_BUFFER, 0, PhotonMap->getPhotonBuffer() );
    glBindBufferBase( GL_SHADER_STORAGE_BUFFER, 1, PhotonMap->getAreaLightBuffer() );
    glBindBufferBase( GL_SHADER_STORAGE_BUFFER, 2, PhotonMap->getWorldBoundsBuffer() );
