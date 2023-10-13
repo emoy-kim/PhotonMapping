@@ -62,6 +62,7 @@ void LightGL::setObjectWithTransform(
    prepareVertexBuffer( n_bytes_per_vertex );
    if (normals_exist) prepareNormal();
    prepareIndexBuffer();
+   DataBuffer.clear();
 
    assert( Vertices.size() == 4 );
 
@@ -81,6 +82,4 @@ void LightGL::setObjectWithTransform(
    SpotlightDirection = Normals[0];
    BoundingBox.MinPoint = glm::vec3(transform * glm::vec4(BoundingBox.MinPoint, 1.0f));
    BoundingBox.MaxPoint = glm::vec3(transform * glm::vec4(BoundingBox.MaxPoint, 1.0f));
-   DataBuffer.clear();
-   IndexBuffer.clear();
 }

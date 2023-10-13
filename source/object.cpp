@@ -334,7 +334,6 @@ void ObjectGL::setObject(
    if (textures_exist) prepareTexture( normals_exist );
    prepareIndexBuffer();
    DataBuffer.clear();
-   IndexBuffer.clear();
 
    if (!mtl_file_path.empty()) setMaterial( mtl_file_path );
 }
@@ -355,15 +354,15 @@ void ObjectGL::setObjectWithTransform(
    const bool textures_exist = !Textures.empty();
    const glm::mat4 vector_transform = glm::transpose( glm::inverse( transform ) );
    for (size_t i = 0; i < Vertices.size(); ++i) {
-      const glm::vec3 p = glm::vec3(transform * glm::vec4(Vertices[i], 1.0f));
-      DataBuffer.emplace_back( p.x );
-      DataBuffer.emplace_back( p.y );
-      DataBuffer.emplace_back( p.z );
+      Vertices[i] = glm::vec3(transform * glm::vec4(Vertices[i], 1.0f));
+      DataBuffer.emplace_back( Vertices[i].x );
+      DataBuffer.emplace_back( Vertices[i].y );
+      DataBuffer.emplace_back( Vertices[i].z );
       if (normals_exist) {
-         const glm::vec3 n = glm::normalize( glm::vec3(vector_transform * glm::vec4(Normals[i], 0.0f)) );
-         DataBuffer.emplace_back( n.x );
-         DataBuffer.emplace_back( n.y );
-         DataBuffer.emplace_back( n.z );
+         Normals[i] = glm::normalize( glm::vec3(vector_transform * glm::vec4(Normals[i], 0.0f)) );
+         DataBuffer.emplace_back( Normals[i].x );
+         DataBuffer.emplace_back( Normals[i].y );
+         DataBuffer.emplace_back( Normals[i].z );
       }
       if (textures_exist) {
          DataBuffer.emplace_back( Textures[i].x );
@@ -380,9 +379,11 @@ void ObjectGL::setObjectWithTransform(
    if (textures_exist) prepareTexture( normals_exist );
    prepareIndexBuffer();
    DataBuffer.clear();
-   IndexBuffer.clear();
 
    if (!mtl_file_path.empty()) setMaterial( mtl_file_path );
+
+   BoundingBox.MinPoint = glm::vec3(transform * glm::vec4(BoundingBox.MinPoint, 1.0f));
+   BoundingBox.MaxPoint = glm::vec3(transform * glm::vec4(BoundingBox.MaxPoint, 1.0f));
 }
 
 void ObjectGL::transferUniformsToShader(const ShaderGL* shader) const
