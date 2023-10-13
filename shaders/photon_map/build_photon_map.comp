@@ -36,11 +36,20 @@ uniform uint Seed;
 uniform int MaxGlobalPhotonNum;
 uniform int MaxDepth;
 uniform int ObjectNum;
+uniform mat4 WorldMatrices[10];
 
 const float zero = 0.0f;
 const float one = 1.0f;
 const float two_pi = 6.28318530717958647692528676655900576f;
 const float one_over_pi = 0.318309886183790671537767526745028724f;
+
+struct IntersectionInfo
+{
+   float Distance;
+   vec2 Barycentric;
+   vec3 Position;
+   vec3 Normal;
+};
 
 float getRandomFloat(inout uint seed)
 {
@@ -122,14 +131,71 @@ bool intersectWithBox(in vec3 ray_origin, in vec3 ray_direction, in vec3 min_poi
    return true;
 }
 
-bool findIntersection(in vec3 ray_origin, in vec3 ray_direction)
+bool intersectWithTriangle(
+   inout IntersectionInfo intersection,
+   in vec3 ray_origin,
+   in vec3 ray_direction,
+   in vec3 p0,
+   in vec3 p1,
+   in vec3 p2,
+   in vec3 n0,
+   in vec3 n1,
+   in vec3 n2
+)
 {
-   float distance = one / zero;
-   for (int i = 0; i < ObjectNum; ++i) {
-      if (!intersectWithBox( ray_origin, ray_direction, world_bounds[i].MinPoint, world_bounds[i].MaxPoint )) continue;
+   vec3 e1 = p1 - p0;
+   vec3 e2 = p2 - p0;
+   vec3 q = cross( ray_direction, e2 );
+   float det = dot( e1, q );
+   if (abs( det ) < 1e-5f) return false;
 
+   float f = one / det;
+   vec3 s = ray_origin - p0;
+   float u = f * dot( s, q );
+   if (u < zero) return false;
+
+   vec3 r = cross( s, e1 );
+   float v = f * dot( ray_direction, r );
+   if (v < zero || u + v > one) return false;
+
+   float t = f * dot( e2, r );
+   if (t < zero) return false;
+
+   if (intersection.Distance <= t) return false;
+
+   intersection.Distance = t;
+   intersection.Barycentric = vec2(u, v);
+   intersection.Position = (one - u - v) * p0 + u * p1 + v * p2;
+   intersection.Normal = (one - u - v) * n0 + u * n1 + v * n2;
+   return true;
+}
+
+bool findIntersection(inout IntersectionInfo intersection, in vec3 ray_origin, in vec3 ray_direction)
+{
+   intersection.Distance = one / zero;
+
+   bool intersect = false;
+   int offset = 0, index_offset = 0;
+   for (int i = 0; i < ObjectNum; ++i) {
+      mat4 vector_transform = transpose( inverse( WorldMatrices[i] ) );
+      if (intersectWithBox( ray_origin, ray_direction, world_bounds[i].MinPoint, world_bounds[i].MaxPoint )) {
+         for (int j = 0; j < index_sizes[i]; j += 3) {
+            int k = 3 * (offset + int(indices[index_offset + j]));
+            vec3 p0 = vec3(WorldMatrices[i] * vec4(vertices[k], vertices[k + 1], vertices[k + 2], one));
+            vec3 n0 = normalize( vec3(vector_transform * vec4(normals[k], normals[k + 1], normals[k + 2], zero)) );
+            k = 3 * (offset + int(indices[index_offset + j + 1]));
+            vec3 p1 = vec3(WorldMatrices[i] * vec4(vertices[k], vertices[k + 1], vertices[k + 2], one));
+            vec3 n1 = normalize( vec3(vector_transform * vec4(normals[k], normals[k + 1], normals[k + 2], zero)) );
+            k = 3 * (offset + int(indices[index_offset + j + 2]));
+            vec3 p2 = vec3(WorldMatrices[i] * vec4(vertices[k], vertices[k + 1], vertices[k + 2], one));
+            vec3 n2 = normalize( vec3(vector_transform * vec4(normals[k], normals[k + 1], normals[k + 2], zero)) );
+            if (intersectWithTriangle( intersection, ray_origin, ray_direction, p0, p1, p2, n0, n1, n2 )) intersect = true;
+         }
+      }
+      offset += vertex_sizes[i];
+      index_offset += index_sizes[i];
    }
-   return false;
+   return intersect;
 }
 
 void main()
@@ -141,7 +207,9 @@ void main()
       vec3 power = getSampleRayFromLight( ray_origin, ray_direction );
       for (int i = 0; i < MaxDepth; ++i) {
          if (any( lessThan( power, vec3(zero) ) )) break;
-         if (!findIntersection( ray_origin, ray_direction )) break;
+
+         IntersectionInfo intersection;
+         if (!findIntersection( intersection, ray_origin, ray_direction )) break;
 
 
       }
