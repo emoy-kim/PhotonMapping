@@ -148,7 +148,8 @@ void PhotonMapGL::setObjects(const std::vector<object_t>& objects)
 void PhotonMapGL::prepareBuilding()
 {
    assert( LightNum > 0 && PhotonBuffer == 0 && AreaLightBuffer == 0 && WorldBoundsBuffer == 0 );
-   assert( ObjectVerticesBuffer == 0 && ObjectNormalsBuffer == 0 && ObjectVertexSizeBuffer == 0 );
+   assert( ObjectVerticesBuffer == 0 && ObjectNormalsBuffer == 0 );
+   assert( ObjectVertexSizeBuffer == 0 && ObjectIndexSizeBuffer == 0 );
 
    // Currently, consider the only one area light.
    const auto light = std::dynamic_pointer_cast<LightGL>(Objects[LightIndices[0]]);
