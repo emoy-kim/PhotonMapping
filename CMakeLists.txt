@@ -15,7 +15,6 @@ set(
 		source/kdtree_object.cpp
 		source/shader.cpp
 		source/kdtree_shader.cpp
-		source/photon_map_shader.cpp
 		source/photon_map.cpp
 		source/renderer.cpp
 		source/renderer_kdtree.cpp

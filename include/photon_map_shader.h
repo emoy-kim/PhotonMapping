@@ -5,6 +5,15 @@
 class BuildPhotonMapShaderGL final : public ShaderGL
 {
 public:
+   enum UNIFORM {
+      Seed = 0,
+      MaxGlobalPhotonNum,
+      MaxDepth,
+      ObjectNum,
+      ObjectMaterialTypes,
+      WorldMatrices
+   };
+
    BuildPhotonMapShaderGL() = default;
    ~BuildPhotonMapShaderGL() override = default;
 
@@ -12,6 +21,4 @@ public:
    BuildPhotonMapShaderGL(const BuildPhotonMapShaderGL&&) = delete;
    BuildPhotonMapShaderGL& operator=(const BuildPhotonMapShaderGL&) = delete;
    BuildPhotonMapShaderGL& operator=(const BuildPhotonMapShaderGL&&) = delete;
-
-   void setUniformLocations() override;
 };
