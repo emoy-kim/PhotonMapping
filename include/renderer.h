@@ -91,6 +91,7 @@ private:
    GLFWwindow* Window;
    bool Pause;
    bool NeedToUpdate;
+   bool ObjectColorGeneratedForVisualization;
    int FrameWidth;
    int FrameHeight;
    glm::ivec2 ClickedPoint;
@@ -115,7 +116,7 @@ private:
 
    void setObjects();
    void setShaders() const;
-   void drawScene() const;
+   void drawScene();
    void render();
 
    // renderer_kdtree.cpp

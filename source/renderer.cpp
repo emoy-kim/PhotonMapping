@@ -1,9 +1,10 @@
 #include "renderer.h"
 
 RendererGL::RendererGL() :
-   Window( nullptr ), Pause( false ), NeedToUpdate( true ), FrameWidth( 1024 ), FrameHeight( 1024 ),
-   ClickedPoint( -1, -1 ), MainCamera( std::make_unique<CameraGL>() ), SceneShader( std::make_unique<SceneShaderGL>() ),
-   PhotonMap( std::make_unique<PhotonMapGL>() ), KdtreeBuilder(), PhotonMapBuilder()
+   Window( nullptr ), Pause( false ), NeedToUpdate( true ), ObjectColorGeneratedForVisualization( false ),
+   FrameWidth( 1024 ), FrameHeight( 1024 ), ClickedPoint( -1, -1 ), MainCamera( std::make_unique<CameraGL>() ),
+   SceneShader( std::make_unique<SceneShaderGL>() ), PhotonMap( std::make_unique<PhotonMapGL>() ), KdtreeBuilder(),
+   PhotonMapBuilder()
 {
    Renderer = this;
 
@@ -267,7 +268,7 @@ void RendererGL::setShaders() const
    setPhotonMapShaders();
 }
 
-void RendererGL::drawScene() const
+void RendererGL::drawScene()
 {
    using u = SceneShaderGL::UNIFORM;
 
@@ -279,27 +280,35 @@ void RendererGL::drawScene() const
    SceneShader->uniform1i( u::UseLight, 1 );
    SceneShader->uniform1i( u::LightNum, 1 );
 
+   // all colors are arbitrarily selected for visualization, not from .mtl files.
    const LightGL* light = PhotonMap->getLight( 0 );
    SceneShader->uniform4fv( u::Lights + u::LightPosition, light->getCentroid() );
-   SceneShader->uniform4fv( u::Lights + u::LightEmissionColor, light->getEmissionColor() );
-   SceneShader->uniform4fv( u::Lights + u::LightAmbientColor, light->getAmbientReflectionColor() );
-   SceneShader->uniform4fv( u::Lights + u::LightDiffuseColor, light->getDiffuseReflectionColor() );
-   SceneShader->uniform4fv( u::Lights + u::LightSpecularColor, light->getSpecularReflectionColor() );
+   SceneShader->uniform4fv( u::Lights + u::LightEmissionColor, glm::vec4(0.1f, 0.1f, 0.1f, 1.0f) );
+   SceneShader->uniform4fv( u::Lights + u::LightAmbientColor, glm::vec4(0.2f, 0.2f, 0.2f, 1.0f) );
+   SceneShader->uniform4fv( u::Lights + u::LightDiffuseColor, glm::vec4(0.8f, 0.8f, 0.8f, 1.0f)  );
+   SceneShader->uniform4fv( u::Lights + u::LightSpecularColor, glm::vec4(0.8f, 0.8f, 0.8f, 1.0f) );
    SceneShader->uniform3fv( u::Lights + u::SpotlightDirection, light->getNormal() );
    SceneShader->uniform1f( u::Lights + u::SpotlightCutoffAngle, light->getSpotlightCutoffAngle() );
    SceneShader->uniform1f( u::Lights + u::SpotlightFeather, light->getSpotlightFeather() );
    SceneShader->uniform1f( u::Lights + u::FallOffRadius, light->getFallOffRadius() );
 
+   static std::vector<glm::vec4> diffuse;
    const auto& objects = PhotonMap->getObjects();
    const auto& to_worlds = PhotonMap->getWorldMatrices();
+   if (!ObjectColorGeneratedForVisualization) {
+       for (size_t i = 0; i < objects.size(); ++i) {
+          diffuse.emplace_back( getRandomValue(0.0f, 1.0f), getRandomValue(0.0f, 1.0f), getRandomValue(0.0f, 1.0f), 1.0f );
+       }
+      ObjectColorGeneratedForVisualization = true;
+   }
    for (size_t i = 0; i < objects.size(); ++i) {
       SceneShader->uniformMat4fv( u::WorldMatrix, to_worlds[i] );
       SceneShader->uniformMat4fv( u::ViewMatrix, MainCamera->getViewMatrix() );
       SceneShader->uniformMat4fv( u::ModelViewProjectionMatrix, MainCamera->getProjectionMatrix() * MainCamera->getViewMatrix() * to_worlds[i] );
-      SceneShader->uniform4fv( u::Material + u::MaterialEmissionColor, objects[i]->getEmissionColor() );
-      SceneShader->uniform4fv( u::Material + u::MaterialAmbientColor, objects[i]->getAmbientReflectionColor() );
-      SceneShader->uniform4fv( u::Material + u::MaterialDiffuseColor, objects[i]->getDiffuseReflectionColor() );
-      SceneShader->uniform4fv( u::Material + u::MaterialSpecularColor, objects[i]->getSpecularReflectionColor() );
+      SceneShader->uniform4fv( u::Material + u::MaterialEmissionColor, glm::vec4(0.1f, 0.1f, 0.1f, 1.0f) );
+      SceneShader->uniform4fv( u::Material + u::MaterialAmbientColor, glm::vec4(0.2f, 0.2f, 0.2f, 1.0f) );
+      SceneShader->uniform4fv( u::Material + u::MaterialDiffuseColor, diffuse[i] );
+      SceneShader->uniform4fv( u::Material + u::MaterialSpecularColor, glm::vec4(0.8f, 0.8f, 0.8f, 1.0f) );
       SceneShader->uniform1f( u::Material + u::MaterialSpecularExponent, objects[i]->getSpecularReflectionExponent() );
       glBindVertexArray( objects[i]->getVAO() );
       glBindBuffer( GL_ELEMENT_ARRAY_BUFFER, objects[i]->getIBO() );
