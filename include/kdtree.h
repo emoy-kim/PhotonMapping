@@ -13,7 +13,7 @@ struct KdtreeNodeGL
    explicit KdtreeNodeGL(int index) : Index( index ), ParentIndex( -1 ), LeftChildIndex( -1 ), RightChildIndex( -1 ) {}
 };
 
-class KdtreeGL final : public ObjectGL
+class KdtreeGL final
 {
 public:
    static constexpr int WarpSize = 32;
@@ -22,15 +22,9 @@ public:
    static constexpr int SampleStride = 128;
    static constexpr int SharedSize = WarpSize * WarpSize;
 
-   KdtreeGL();
-   ~KdtreeGL() override = default;
+   explicit KdtreeGL(int size);
+   ~KdtreeGL() = default;
 
-   void setObject(
-      GLenum draw_mode,
-      const TYPE& type,
-      const std::string& obj_file_path,
-      const std::string& mtl_file_path
-   ) override;
    void initialize();
    void prepareSorting();
    void releaseSorting();
@@ -49,7 +43,7 @@ public:
    [[nodiscard]] int getUniqueNum() const { return UniqueNum; }
    [[nodiscard]] int getRootNode() const { return RootNode; }
    [[nodiscard]] int getNodeNum() const { return NodeNum; }
-   [[nodiscard]] int getSize() const { return static_cast<int>(Vertices.size()); }
+   [[nodiscard]] int getSize() const { return Size; }
    [[nodiscard]] int getMaxSampleNum() const { return Sort.MaxSampleNum; }
    [[nodiscard]] GLuint getRoot() const { return Root; }
    [[nodiscard]] GLuint getCoordinates() const { return Coordinates; }
@@ -68,7 +62,16 @@ public:
    [[nodiscard]] GLuint getSearchLists() const { return Search.Lists; }
    [[nodiscard]] GLuint getSearchListLengths() const { return Search.ListLengths; }
    [[nodiscard]] GLuint getQueries() const { return Search.Queries; }
-   [[nodiscard]] const std::vector<glm::vec3>& getVertices() const { return Vertices; }
+   static void releaseBuffer(GLuint buffer) { glDeleteBuffers( 1, &buffer ); }
+
+   template<typename T>
+   [[nodiscard]] static GLuint addBuffer(int data_size)
+   {
+      GLuint buffer = 0;
+      glCreateBuffers( 1, &buffer );
+      glNamedBufferStorage( buffer, sizeof( T ) * data_size, nullptr, GL_DYNAMIC_STORAGE_BIT );
+      return buffer;
+   }
 
 private:
    struct SortGL
@@ -96,6 +99,7 @@ private:
    };
 
    const int Dim;
+   int Size;
    int UniqueNum;
    int RootNode;
    int NodeNum;

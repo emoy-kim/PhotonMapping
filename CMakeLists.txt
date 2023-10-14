@@ -12,7 +12,7 @@ set(
 		source/camera.cpp
 		source/object.cpp
 		source/light_object.cpp
-		source/kdtree_object.cpp
+		source/kdtree.cpp
 		source/shader.cpp
 		source/photon_map.cpp
 		source/renderer.cpp
