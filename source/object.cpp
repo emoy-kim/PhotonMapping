@@ -2,9 +2,9 @@
 
 ObjectGL::ObjectGL() :
    Type( TYPE::ARBITRARY ), MaterialType( MATERIAL_TYPE::LAMBERT ), VAO( 0 ), VBO( 0 ), IBO( 0 ), DrawMode( 0 ),
-   IndexNum( 0 ), VerticesCount( 0 ), BoundingBox(), EmissionColor( 0.1f, 0.1f, 0.1f, 1.0f ),
-   AmbientReflectionColor( 0.2f, 0.2f, 0.2f, 1.0f ), DiffuseReflectionColor( 0.8f, 0.8f, 0.8f, 1.0f ),
-   SpecularReflectionColor( 0.8f, 0.8f, 0.8f, 1.0f ), SpecularReflectionExponent( 16.0f ), RefractiveIndex( 1.0f )
+   IndexNum( 0 ), VerticesCount( 0 ), BoundingBox(), EmissionColor( 0.0f, 0.0f, 0.0f, 1.0f ),
+   AmbientReflectionColor( 0.0f, 0.0f, 0.0f, 1.0f ), DiffuseReflectionColor( 0.0f, 0.0f, 0.0f, 1.0f ),
+   SpecularReflectionColor( 0.0f, 0.0f, 0.0f, 1.0f ), SpecularReflectionExponent( 16.0f ), RefractiveIndex( 1.0f )
 {
 }
 
@@ -288,10 +288,10 @@ void ObjectGL::setMaterial(const std::string& mtl_file_path)
       else if (parsed[0] == "Ns") SpecularReflectionExponent = std::stof( parsed[1] );
       else if (parsed[0] == "Ni") RefractiveIndex = std::stof( parsed[1] );
       else if (parsed[0] == "illum") {
-         switch (std::stoi( parsed[0] )) {
-            case 5: MaterialType = MATERIAL_TYPE::MIRROR;
-            case 7: MaterialType = MATERIAL_TYPE::GLASS;
-            default: MaterialType = MATERIAL_TYPE::LAMBERT;
+         switch (std::stoi( parsed[1] )) {
+            case 5: MaterialType = MATERIAL_TYPE::MIRROR; break;
+            case 7: MaterialType = MATERIAL_TYPE::GLASS; break;
+            default: MaterialType = MATERIAL_TYPE::LAMBERT; break;
          }
       }
    }

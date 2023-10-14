@@ -66,7 +66,7 @@ public:
       Textures.clear();
    }
    [[nodiscard]] bool isLight() const { return Type == TYPE::LIGHT; }
-   [[nodiscard]] int getObjectType() const { return static_cast<int>(Type); }
+   [[nodiscard]] bool isLambert() const { return MaterialType == MATERIAL_TYPE::LAMBERT; }
    [[nodiscard]] int getMaterialType() const { return static_cast<int>(MaterialType); }
    [[nodiscard]] GLuint getVAO() const { return VAO; }
    [[nodiscard]] GLuint getVBO() const { return VBO; }
