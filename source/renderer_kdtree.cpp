@@ -4,106 +4,84 @@ void RendererGL::setKdtreeShaders() const
 {
    const std::string shader_directory_path = std::string(CMAKE_SOURCE_DIR) + "/shaders";
    KdtreeBuilder.Initialize->setComputeShader( std::string(shader_directory_path + "/kdtree/initialize.comp").c_str() );
-   KdtreeBuilder.Initialize->setUniformLocations();
 
    KdtreeBuilder.InitializeReference->setComputeShader(
       std::string(shader_directory_path + "/kdtree/initialize_reference.comp").c_str()
    );
-   KdtreeBuilder.InitializeReference->setUniformLocations();
 
    KdtreeBuilder.CopyCoordinates->setComputeShader(
       std::string(shader_directory_path + "/kdtree/copy_coordinates.comp").c_str()
    );
-   KdtreeBuilder.CopyCoordinates->setUniformLocations();
 
    KdtreeBuilder.SortByBlock->setComputeShader(
       std::string(shader_directory_path + "/kdtree/sort_by_block.comp").c_str()
    );
-   KdtreeBuilder.SortByBlock->setUniformLocations();
 
    KdtreeBuilder.SortLastBlock->setComputeShader(
       std::string(shader_directory_path + "/kdtree/sort_last_block.comp").c_str()
    );
-   KdtreeBuilder.SortLastBlock->setUniformLocations();
 
    KdtreeBuilder.GenerateSampleRanks->setComputeShader(
       std::string(shader_directory_path + "/kdtree/generate_sample_ranks.comp").c_str()
    );
-   KdtreeBuilder.GenerateSampleRanks->setUniformLocations();
 
    KdtreeBuilder.MergeRanksAndIndices->setComputeShader(
       std::string(shader_directory_path + "/kdtree/merge_ranks_and_indices.comp").c_str()
    );
-   KdtreeBuilder.MergeRanksAndIndices->setUniformLocations();
 
    KdtreeBuilder.MergeReferences->setComputeShader(
       std::string(shader_directory_path + "/kdtree/merge_references.comp").c_str()
    );
-   KdtreeBuilder.MergeReferences->setUniformLocations();
 
    KdtreeBuilder.RemoveDuplicates->setComputeShader(
       std::string(shader_directory_path + "/kdtree/remove_duplicates.comp").c_str()
    );
-   KdtreeBuilder.RemoveDuplicates->setUniformLocations();
 
    KdtreeBuilder.RemoveGaps->setComputeShader(
       std::string(shader_directory_path + "/kdtree/remove_gaps.comp").c_str()
    );
-   KdtreeBuilder.RemoveGaps->setUniformLocations();
 
    KdtreeBuilder.Partition->setComputeShader( std::string(shader_directory_path + "/kdtree/partition.comp").c_str() );
-   KdtreeBuilder.Partition->setUniformLocations();
 
    KdtreeBuilder.RemovePartitionGaps->setComputeShader(
       std::string(shader_directory_path + "/kdtree/remove_partition_gaps.comp").c_str()
    );
-   KdtreeBuilder.RemovePartitionGaps->setUniformLocations();
 
    KdtreeBuilder.SmallPartition->setComputeShader(
       std::string(shader_directory_path + "/kdtree/small_partition.comp").c_str()
    );
-   KdtreeBuilder.SmallPartition->setUniformLocations();
 
    KdtreeBuilder.CopyReference->setComputeShader(
       std::string(shader_directory_path + "/kdtree/copy_reference.comp").c_str()
    );
-   KdtreeBuilder.CopyReference->setUniformLocations();
 
    KdtreeBuilder.PartitionFinal->setComputeShader(
       std::string(shader_directory_path + "/kdtree/partition_final.comp").c_str()
    );
-   KdtreeBuilder.PartitionFinal->setUniformLocations();
 
    KdtreeBuilder.Verify->setComputeShader( std::string(shader_directory_path + "/kdtree/verify.comp").c_str() );
-   KdtreeBuilder.Verify->setUniformLocations();
 
    KdtreeBuilder.SumNodeNum->setComputeShader(
       std::string(shader_directory_path + "/kdtree/sum_node_num.comp").c_str()
    );
-   KdtreeBuilder.SumNodeNum->setUniformLocations();
 
    KdtreeBuilder.Search->setComputeShader( std::string(shader_directory_path + "/kdtree/search.comp").c_str() );
-   KdtreeBuilder.Search->setUniformLocations();
 
    KdtreeBuilder.CopyFoundPoints->setComputeShader(
       std::string(shader_directory_path + "/kdtree/copy_found_points.comp").c_str()
    );
-   KdtreeBuilder.CopyFoundPoints->setUniformLocations();
 
    KdtreeBuilder.InitializeKNN->setComputeShader(
       std::string(shader_directory_path + "/kdtree/initialize_knn.comp").c_str()
    );
-   KdtreeBuilder.InitializeKNN->setUniformLocations();
 
    KdtreeBuilder.FindNearestNeighbors->setComputeShader(
       std::string(shader_directory_path + "/kdtree/find_nearest_neighbors.comp").c_str()
    );
-   KdtreeBuilder.FindNearestNeighbors->setUniformLocations();
 
    KdtreeBuilder.CopyEncodedFoundPoints->setComputeShader(
       std::string(shader_directory_path + "/kdtree/copy_encoded_found_points.comp").c_str()
    );
-   KdtreeBuilder.CopyEncodedFoundPoints->setUniformLocations();
 }
 #if 0
 void RendererGL::sortByAxis(int axis) const
@@ -492,10 +470,10 @@ void RendererGL::verify() const
 
    Object->releaseVerifying();
 }
-
+#endif
 void RendererGL::buildKdtree() const
 {
-   Object->initialize();
+   /*IObject->initialize();
    glUseProgram( KdtreeBuilder.Initialize->getShaderProgram() );
    KdtreeBuilder.Initialize->uniform1i( "Size", Object->getSize() );
    glBindBufferBase( GL_SHADER_STORAGE_BUFFER, 0, Object->getRoot() );
@@ -504,9 +482,9 @@ void RendererGL::buildKdtree() const
 
    sort();
    build();
-   verify();
+   verify();*/
 }
-#endif
+
 #if 0
 void RendererGL::search()
 {

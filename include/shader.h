@@ -1,7 +1,6 @@
 ﻿#pragma once
 
 #include "base.h"
-#include "camera.h"
 
 class ShaderGL
 {
@@ -17,11 +16,6 @@ public:
       const char* tessellation_evaluation_shader_path = nullptr
    );
    void setComputeShader(const char* compute_shader_path);
-   virtual void setUniformLocations() {}
-   void addUniformLocation(const std::string& name)
-   {
-      CustomLocations[name] = glGetUniformLocation( ShaderProgram, name.c_str() );
-   }
    void uniform1i(int location, int value) const
    {
       glProgramUniform1i( ShaderProgram, location, value );
@@ -94,20 +88,10 @@ public:
    {
       glProgramUniformMatrix4x3fv( ShaderProgram, location, 1, GL_FALSE, glm::value_ptr( value ) );
    }
-
-   void uniform1i(const char* name, int value) const
-   {
-      glProgramUniform1i( ShaderProgram, CustomLocations.find( name )->second, value );
-   }
-   void uniform1f(const char* name, float value) const
-   {
-      glProgramUniform1f( ShaderProgram, CustomLocations.find( name )->second, value );
-   }
    [[nodiscard]] GLuint getShaderProgram() const { return ShaderProgram; }
 
 protected:
    GLuint ShaderProgram;
-   std::unordered_map<std::string, GLint> CustomLocations;
 
    static void readShaderFile(std::string& shader_contents, const char* shader_path);
    [[nodiscard]] static std::string getShaderTypeString(GLenum shader_type);

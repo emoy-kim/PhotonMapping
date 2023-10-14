@@ -8,6 +8,7 @@
 
 #include "base.h"
 #include "canvas.h"
+#include "camera.h"
 #include "photon_map.h"
 #include "kdtree_shader.h"
 #include "photon_map_shader.h"

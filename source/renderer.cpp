@@ -330,7 +330,7 @@ void RendererGL::play()
    setObjects();
    setShaders();
    createPhotonMap();
-   //buildKdtree();
+   buildKdtree();
 
    glfwShowWindow( Window );
    while (!glfwWindowShouldClose( Window )) {
