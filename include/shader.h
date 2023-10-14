@@ -49,6 +49,79 @@ public:
       CustomLocations[name] = glGetUniformLocation( ShaderProgram, name.c_str() );
    }
    void transferBasicTransformationUniforms(const glm::mat4& to_world, const CameraGL* camera) const;
+   void uniform1i(int location, int value) const
+   {
+      glProgramUniform1i( ShaderProgram, location, value );
+   }
+   void uniform1ui(int location, uint value) const
+   {
+      glProgramUniform1ui( ShaderProgram, location, value );
+   }
+   void uniform1iv(int location, int count, const int* value) const
+   {
+      glProgramUniform1iv( ShaderProgram, location, count, value );
+   }
+   void uniform1f(int location, float value) const
+   {
+      glProgramUniform1f( ShaderProgram, location, value );
+   }
+   void uniform1fv(int location, int count, const float* value) const
+   {
+      glProgramUniform1fv( ShaderProgram, location, count, value );
+   }
+   void uniform2iv(int location, const glm::ivec2& value) const
+   {
+      glProgramUniform2iv( ShaderProgram, location, 1, &value[0] );
+   }
+   void uniform2fv(int location, const glm::vec2& value) const
+   {
+      glProgramUniform2fv( ShaderProgram, location, 1, &value[0] );
+   }
+   void uniform2fv(int location, int count, const glm::vec2* value) const
+   {
+      glProgramUniform2fv( ShaderProgram, location, count, glm::value_ptr( *value ) );
+   }
+   void uniform2fv(int location, int count, const float* value) const
+   {
+      glProgramUniform2fv( ShaderProgram, location, count, value );
+   }
+   void uniform3fv(int location, const glm::vec3& value) const
+   {
+      glProgramUniform3fv( ShaderProgram, location, 1, &value[0] );
+   }
+   void uniform3fv(int location, int count, const glm::vec3* value) const
+   {
+      glProgramUniform3fv( ShaderProgram, location, count, glm::value_ptr( *value ) );
+   }
+   void uniform3fv(int location, int count, const float* value) const
+   {
+      glProgramUniform3fv( ShaderProgram, location, count, value );
+   }
+   void uniform4fv(int location, const glm::vec4& value) const
+   {
+      glProgramUniform4fv( ShaderProgram, location, 1, &value[0] );
+   }
+   void uniform4fv(int location, int count, const float* value) const
+   {
+      glProgramUniform4fv( ShaderProgram, location, count, value );
+   }
+   void uniformMat3fv(int location, const glm::mat3& value) const
+   {
+      glProgramUniformMatrix3fv( ShaderProgram, location, 1, GL_FALSE, glm::value_ptr( value ) );
+   }
+   void uniformMat4fv(int location, const glm::mat4& value) const
+   {
+      glProgramUniformMatrix4fv( ShaderProgram, location, 1, GL_FALSE, glm::value_ptr( value ) );
+   }
+   void uniformMat4fv(int location, int count, const glm::mat4* value) const
+   {
+      glProgramUniformMatrix4fv( ShaderProgram, location, count, GL_FALSE, glm::value_ptr( *value ) );
+   }
+   void uniformMat43fv(int location, const glm::mat<3, 4, float, glm::highp>& value) const
+   {
+      glProgramUniformMatrix4x3fv( ShaderProgram, location, 1, GL_FALSE, glm::value_ptr( value ) );
+   }
+
    void uniform1i(const char* name, int value) const
    {
       glProgramUniform1i( ShaderProgram, CustomLocations.find( name )->second, value );

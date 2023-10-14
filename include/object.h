@@ -68,6 +68,7 @@ public:
    }
    [[nodiscard]] bool isLight() const { return Type == TYPE::LIGHT; }
    [[nodiscard]] int getObjectType() const { return static_cast<int>(Type); }
+   [[nodiscard]] int getMaterialType() const { return static_cast<int>(MaterialType); }
    [[nodiscard]] GLuint getVAO() const { return VAO; }
    [[nodiscard]] GLuint getVBO() const { return VBO; }
    [[nodiscard]] GLuint getIBO() const { return IBO; }

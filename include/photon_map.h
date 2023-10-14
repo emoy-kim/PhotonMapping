@@ -52,6 +52,12 @@ public:
       assert( object->isLight() );
       return dynamic_cast<const LightGL*>(object);
    }
+   [[nodiscard]] std::vector<int> getObjectMaterialTypes() const
+   {
+      std::vector<int> types;
+      for (const auto& object : Objects) types.emplace_back( object->getMaterialType() );
+      return types;
+   }
    [[nodiscard]] const std::vector<glm::mat4>& getWorldMatrices() const { return ToWorlds; }
    [[nodiscard]] const std::vector<std::shared_ptr<ObjectGL>>& getObjects() const { return Objects; }
    [[nodiscard]] GLuint getPhotonBuffer() const { return PhotonBuffer; }
