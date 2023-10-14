@@ -10,8 +10,9 @@ public:
       MaxGlobalPhotonNum,
       MaxDepth,
       ObjectNum,
-      ObjectMaterialTypes,
-      WorldMatrices
+      ObjectBRDFs,
+      ObjectMaterialTypes = 14,
+      WorldMatrices = 24
    };
 
    BuildPhotonMapShaderGL() = default;
