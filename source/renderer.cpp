@@ -1,10 +1,9 @@
 #include "renderer.h"
 
 RendererGL::RendererGL() :
-   Window( nullptr ), Pause( false ), NeedToUpdate( true ), ObjectColorGeneratedForVisualization( false ),
-   FrameWidth( 1024 ), FrameHeight( 1024 ), ClickedPoint( -1, -1 ), MainCamera( std::make_unique<CameraGL>() ),
-   SceneShader( std::make_unique<SceneShaderGL>() ), PhotonMap( std::make_unique<PhotonMapGL>() ), KdtreeBuilder(),
-   PhotonMapBuilder()
+   Window( nullptr ), Pause( false ), NeedToUpdate( true ), FrameWidth( 1024 ), FrameHeight( 1024 ),
+   ClickedPoint( -1, -1 ), MainCamera( std::make_unique<CameraGL>() ), SceneShader( std::make_unique<SceneShaderGL>() ),
+   PhotonMap( std::make_unique<PhotonMapGL>() ), KdtreeBuilder(), PhotonMapBuilder()
 {
    Renderer = this;
 
@@ -295,11 +294,10 @@ void RendererGL::drawScene()
    static std::vector<glm::vec4> diffuse;
    const auto& objects = PhotonMap->getObjects();
    const auto& to_worlds = PhotonMap->getWorldMatrices();
-   if (!ObjectColorGeneratedForVisualization) {
+   if (diffuse.empty()) {
        for (size_t i = 0; i < objects.size(); ++i) {
           diffuse.emplace_back( getRandomValue(0.0f, 1.0f), getRandomValue(0.0f, 1.0f), getRandomValue(0.0f, 1.0f), 1.0f );
        }
-      ObjectColorGeneratedForVisualization = true;
    }
    for (size_t i = 0; i < objects.size(); ++i) {
       SceneShader->uniformMat4fv( u::WorldMatrix, to_worlds[i] );

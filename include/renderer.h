@@ -91,7 +91,6 @@ private:
    GLFWwindow* Window;
    bool Pause;
    bool NeedToUpdate;
-   bool ObjectColorGeneratedForVisualization;
    int FrameWidth;
    int FrameHeight;
    glm::ivec2 ClickedPoint;
