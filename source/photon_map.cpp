@@ -223,6 +223,24 @@ void PhotonMapGL::prepareBuilding()
    glNamedBufferSubData( ObjectIndexSizeBuffer, 0, buffer_size, index_sizes.data() );
 }
 
+void PhotonMapGL::releaseBuilding()
+{
+   glDeleteBuffers( 1, &AreaLightBuffer );
+   glDeleteBuffers( 1, &WorldBoundsBuffer );
+   glDeleteBuffers( 1, &ObjectVerticesBuffer );
+   glDeleteBuffers( 1, &ObjectNormalsBuffer );
+   glDeleteBuffers( 1, &ObjectIndicesBuffer );
+   glDeleteBuffers( 1, &ObjectVertexSizeBuffer );
+   glDeleteBuffers( 1, &ObjectIndexSizeBuffer );
+   AreaLightBuffer = 0;
+   WorldBoundsBuffer = 0;
+   ObjectVerticesBuffer = 0;
+   ObjectNormalsBuffer = 0;
+   ObjectIndicesBuffer = 0;
+   ObjectVertexSizeBuffer = 0;
+   ObjectIndexSizeBuffer = 0;
+}
+
 std::vector<glm::vec3> PhotonMapGL::getBRDFs() const
 {
    std::vector<glm::vec3> brdfs;

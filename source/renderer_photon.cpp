@@ -38,4 +38,6 @@ void RendererGL::createPhotonMap()
    glBindBufferBase( GL_SHADER_STORAGE_BUFFER, 7, PhotonMap->getObjectIndexSizeBuffer() );
    glDispatchCompute( PhotonMapGL::ThreadBlockNum, 1, 1 );
    glMemoryBarrier( GL_SHADER_STORAGE_BARRIER_BIT );
+
+   PhotonMap->releaseBuilding();
 }

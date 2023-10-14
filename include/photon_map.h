@@ -44,6 +44,7 @@ public:
 
    void setObjects(const std::vector<object_t>& objects);
    void prepareBuilding();
+   void releaseBuilding();
    [[nodiscard]] int getLightNum() const { return LightNum; }
    [[nodiscard]] int getObjectNum() const { return static_cast<int>(Objects.size()); }
    [[nodiscard]] const LightGL* getLight(int index) const
