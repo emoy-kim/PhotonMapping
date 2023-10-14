@@ -12,11 +12,11 @@ void RendererGL::createPhotonMap()
 {
    using u = BuildPhotonMapShaderGL::UNIFORM;
 
-   PhotonMap->prepareBuilding();
-
    std::vector<uint> seed(1);
    std::seed_seq sequence{ std::chrono::system_clock::now().time_since_epoch().count() };
    sequence.generate( seed.begin(), seed.end() );
+
+   PhotonMap->prepareBuilding();
    const auto& to_worlds = PhotonMap->getWorldMatrices();
    const auto types = PhotonMap->getObjectMaterialTypes();
    const auto brdfs = PhotonMap->getBRDFs();
@@ -38,6 +38,7 @@ void RendererGL::createPhotonMap()
    glBindBufferBase( GL_SHADER_STORAGE_BUFFER, 7, PhotonMap->getObjectIndexSizeBuffer() );
    glDispatchCompute( PhotonMapGL::ThreadBlockNum, 1, 1 );
    glMemoryBarrier( GL_SHADER_STORAGE_BARRIER_BIT );
-
    PhotonMap->releaseBuilding();
+
+   buildKdtree( PhotonMap->getGlobalPhotonTree(), PhotonMap->getPhotonBuffer() );
 }

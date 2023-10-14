@@ -10,7 +10,16 @@ struct KdtreeNode
    int RightChildIndex;
 };
 
+struct Photon
+{
+   vec3 Power;
+   vec3 Position;
+   vec3 IncomingDirection;
+};
+
 layout (binding = 0, std430) buffer Root { KdtreeNode root[]; };
+layout (binding = 1, std430) buffer Coordinates { float coordinates[]; };
+layout (binding = 2, std430) buffer Photons { Photon photons[]; };
 
 layout (location = 0) uniform int Size;
 
@@ -23,5 +32,9 @@ void main()
       root[i].ParentIndex = -1;
       root[i].LeftChildIndex = -1;
       root[i].RightChildIndex = -1;
+
+      coordinates[3 * i] = photons[i].Position.x;
+      coordinates[3 * i + 1] = photons[i].Position.y;
+      coordinates[3 * i + 2] = photons[i].Position.z;
    }
 }

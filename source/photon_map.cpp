@@ -221,6 +221,8 @@ void PhotonMapGL::prepareBuilding()
    glCreateBuffers( 1, &ObjectIndexSizeBuffer );
    glNamedBufferStorage( ObjectIndexSizeBuffer, buffer_size, nullptr, GL_DYNAMIC_STORAGE_BIT );
    glNamedBufferSubData( ObjectIndexSizeBuffer, 0, buffer_size, index_sizes.data() );
+
+   GlobalPhotonTree = std::make_shared<KdtreeGL>( MaxGlobalPhotonNum );
 }
 
 void PhotonMapGL::releaseBuilding()

@@ -121,13 +121,13 @@ private:
 
    // renderer_kdtree.cpp
    void setKdtreeShaders() const;
-   void sortByAxis(int axis) const;
-   void removeDuplicates(int axis) const;
-   void sort() const;
-   void partitionDimension(int axis, int depth) const;
-   void build() const;
-   void verify() const;
-   void buildKdtree() const;
+   void sortByAxis(KdtreeGL* kdtree, int axis) const;
+   void removeDuplicates(KdtreeGL* kdtree, int axis) const;
+   void sort(KdtreeGL* kdtree) const;
+   void partitionDimension(KdtreeGL* kdtree, int axis, int depth) const;
+   void build(KdtreeGL* kdtree) const;
+   void verify(KdtreeGL* kdtree) const;
+   void buildKdtree(KdtreeGL* kdtree, GLuint photon_buffer) const;
    //void search();
    //void findNearestNeighbors();
 

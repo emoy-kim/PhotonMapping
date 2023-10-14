@@ -1,7 +1,7 @@
 #pragma once
 
 #include "light_object.h"
-#include "kdtree_object.h"
+#include "kdtree.h"
 
 // <obj file path, mtl file path, type, world matrix>
 using object_t = std::tuple<std::string, std::string, ObjectGL::TYPE, glm::mat4>;
@@ -59,6 +59,7 @@ public:
       for (const auto& object : Objects) types.emplace_back( object->getMaterialType() );
       return types;
    }
+   [[nodiscard]] KdtreeGL* getGlobalPhotonTree() const { return GlobalPhotonTree.get(); }
    [[nodiscard]] std::vector<glm::vec3> getBRDFs() const;
    [[nodiscard]] const std::vector<glm::mat4>& getWorldMatrices() const { return ToWorlds; }
    [[nodiscard]] const std::vector<std::shared_ptr<ObjectGL>>& getObjects() const { return Objects; }
@@ -74,7 +75,6 @@ public:
 private:
    int LightNum;
    std::vector<int> LightIndices;
-   std::vector<Photon> Photons;
    std::shared_ptr<KdtreeGL> GlobalPhotonTree;
    std::vector<std::shared_ptr<ObjectGL>> Objects;
    std::vector<glm::mat4> ToWorlds;
