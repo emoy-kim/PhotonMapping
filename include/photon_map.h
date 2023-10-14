@@ -18,7 +18,7 @@ public:
    {
       alignas(16) glm::vec3 Power;
       alignas(16) glm::vec3 Position;
-      alignas(8) glm::vec2 IncomingDirection;
+      alignas(16) glm::vec3 IncomingDirection;
 
       Photon() : Power(), Position(), IncomingDirection() {}
    };
@@ -58,6 +58,7 @@ public:
       for (const auto& object : Objects) types.emplace_back( object->getMaterialType() );
       return types;
    }
+   [[nodiscard]] std::vector<glm::vec3> getBRDFs() const;
    [[nodiscard]] const std::vector<glm::mat4>& getWorldMatrices() const { return ToWorlds; }
    [[nodiscard]] const std::vector<std::shared_ptr<ObjectGL>>& getObjects() const { return Objects; }
    [[nodiscard]] GLuint getPhotonBuffer() const { return PhotonBuffer; }

@@ -19,11 +19,13 @@ void RendererGL::createPhotonMap()
    sequence.generate( seed.begin(), seed.end() );
    const auto& to_worlds = PhotonMap->getWorldMatrices();
    const auto types = PhotonMap->getObjectMaterialTypes();
+   const auto brdfs = PhotonMap->getBRDFs();
    glUseProgram( PhotonMapBuilder.BuildPhotonMap->getShaderProgram() );
    PhotonMapBuilder.BuildPhotonMap->uniform1ui( u::Seed, seed[0] );
    PhotonMapBuilder.BuildPhotonMap->uniform1i( u::MaxGlobalPhotonNum, PhotonMapGL::MaxGlobalPhotonNum );
    PhotonMapBuilder.BuildPhotonMap->uniform1i( u::MaxDepth, PhotonMapGL::MaxDepth );
    PhotonMapBuilder.BuildPhotonMap->uniform1i( u::ObjectNum, PhotonMap->getObjectNum() );
+   PhotonMapBuilder.BuildPhotonMap->uniform3fv( u::ObjectBRDFs, static_cast<int>(brdfs.size()), brdfs.data() );
    PhotonMapBuilder.BuildPhotonMap->uniform1iv( u::ObjectMaterialTypes, static_cast<int>(types.size()), types.data() );
    PhotonMapBuilder.BuildPhotonMap->uniformMat4fv( u::WorldMatrices, static_cast<int>(to_worlds.size()), to_worlds.data() );
    glBindBufferBase( GL_SHADER_STORAGE_BUFFER, 0, PhotonMap->getPhotonBuffer() );

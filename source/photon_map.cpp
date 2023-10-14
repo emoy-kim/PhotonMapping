@@ -223,6 +223,16 @@ void PhotonMapGL::prepareBuilding()
    glNamedBufferSubData( ObjectIndexSizeBuffer, 0, buffer_size, index_sizes.data() );
 }
 
+std::vector<glm::vec3> PhotonMapGL::getBRDFs() const
+{
+   std::vector<glm::vec3> brdfs;
+   for (const auto& object : Objects) {
+      if (object->isLambert()) brdfs.emplace_back( object->getDiffuseReflectionColor() );
+      else brdfs.emplace_back( 1.0f, 1.0f, 1.0f );
+   }
+   return brdfs;
+}
+
 #if 0
 PhotonMap::PhotonMap(int max_photons) :
    MaxPhotons( max_photons ), StoredPhotonNum( 0 ), HalfStoredPhotons( 0 ), PreviousScale( 1 ), MinBoundingBox( 1e-8f ),
