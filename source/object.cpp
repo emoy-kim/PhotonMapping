@@ -385,13 +385,3 @@ void ObjectGL::setObjectWithTransform(
    BoundingBox.MinPoint = glm::vec3(transform * glm::vec4(BoundingBox.MinPoint, 1.0f));
    BoundingBox.MaxPoint = glm::vec3(transform * glm::vec4(BoundingBox.MaxPoint, 1.0f));
 }
-
-void ObjectGL::transferUniformsToShader(const ShaderGL* shader) const
-{
-   const GLuint program = shader->getShaderProgram();
-   glProgramUniform4fv( program, shader->getMaterialEmissionLocation(), 1, &EmissionColor[0] );
-   glProgramUniform4fv( program, shader->getMaterialAmbientLocation(), 1, &AmbientReflectionColor[0] );
-   glProgramUniform4fv( program, shader->getMaterialDiffuseLocation(), 1, &DiffuseReflectionColor[0] );
-   glProgramUniform4fv( program, shader->getMaterialSpecularLocation(), 1, &SpecularReflectionColor[0] );
-   glProgramUniform1f( program, shader->getMaterialSpecularExponentLocation(), SpecularReflectionExponent );
-}

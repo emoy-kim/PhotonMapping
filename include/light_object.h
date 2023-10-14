@@ -9,7 +9,6 @@ public:
    ~LightGL() override = default;
 
    void toggleLightSwitch() { TurnLightOn = !TurnLightOn; }
-   void transferUniformsToShader(const ShaderGL* shader, int index) const;
    void setObjectWithTransform(
       GLenum draw_mode,
       const TYPE& type,
@@ -17,6 +16,9 @@ public:
       const std::string& obj_file_path,
       const std::string& mtl_file_path
    ) override;
+   [[nodiscard]] float getSpotlightCutoffAngle() const { return SpotlightCutoffAngle; }
+   [[nodiscard]] float getSpotlightFeather() const { return SpotlightFeather; }
+   [[nodiscard]] float getFallOffRadius() const { return FallOffRadius; }
    [[nodiscard]] glm::vec3 getNormal() const { return SpotlightDirection; }
    [[nodiscard]] glm::vec4 getCentroid() const;
    [[nodiscard]] const std::vector<float>& getAreas() const { return Areas; }

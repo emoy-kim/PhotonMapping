@@ -51,7 +51,6 @@ public:
    );
    int addTexture(const std::string& texture_file_path, bool is_grayscale = false);
    void addTexture(int width, int height, bool is_grayscale = false);
-   virtual void transferUniformsToShader(const ShaderGL* shader) const;
    void releaseCustomBuffer(const std::string& name)
    {
       const auto it = CustomBuffers.find( name );
@@ -78,6 +77,10 @@ public:
    [[nodiscard]] GLuint getTextureID(int index) const { return TextureID[index]; }
    [[nodiscard]] Rect getBoundingBox() const { return BoundingBox; }
    [[nodiscard]] glm::vec4 getEmissionColor() const { return EmissionColor; }
+   [[nodiscard]] glm::vec4 getAmbientReflectionColor() const { return AmbientReflectionColor; }
+   [[nodiscard]] glm::vec4 getDiffuseReflectionColor() const { return DiffuseReflectionColor; }
+   [[nodiscard]] glm::vec4 getSpecularReflectionColor() const { return SpecularReflectionColor; }
+   [[nodiscard]] float getSpecularReflectionExponent() const { return SpecularReflectionExponent; }
    [[nodiscard]] const std::vector<GLuint>& getIndices() const { return IndexBuffer; }
    [[nodiscard]] const std::vector<glm::vec3>& getVertices() const { return Vertices; }
    [[nodiscard]] const std::vector<glm::vec3>& getNormals() const { return Normals; }

@@ -15,20 +15,6 @@ glm::vec4 LightGL::getCentroid() const
    return { sum / static_cast<float>(Triangles.size() * 3), 1.0f };
 }
 
-void LightGL::transferUniformsToShader(const ShaderGL* shader, int index) const
-{
-   const GLuint program = shader->getShaderProgram();
-   glProgramUniform4fv( program, shader->getLightPositionLocation( index ), 1, &getCentroid()[0] );
-   glProgramUniform4fv( program, shader->getLightEmissionLocation( index ), 1, &EmissionColor[0] );
-   glProgramUniform4fv( program, shader->getLightAmbientLocation( index ), 1, &AmbientReflectionColor[0] );
-   glProgramUniform4fv( program, shader->getLightDiffuseLocation( index ), 1, &DiffuseReflectionColor[0] );
-   glProgramUniform4fv( program, shader->getLightSpecularLocation( index ), 1, &SpecularReflectionColor[0] );
-   glProgramUniform3fv( program, shader->getLightSpotlightDirectionLocation( index ), 1, &SpotlightDirection[0] );
-   glProgramUniform1f( program, shader->getLightSpotlightCutoffAngleLocation( index ), SpotlightCutoffAngle );
-   glProgramUniform1f( program, shader->getLightSpotlightFeatherLocation( index ), SpotlightFeather );
-   glProgramUniform1f( program, shader->getLightFallOffRadiusLocation( index ), FallOffRadius );
-}
-
 void LightGL::setObjectWithTransform(
    GLenum draw_mode,
    const TYPE& type,

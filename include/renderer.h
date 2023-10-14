@@ -95,7 +95,7 @@ private:
    int FrameHeight;
    glm::ivec2 ClickedPoint;
    std::unique_ptr<CameraGL> MainCamera;
-   std::unique_ptr<ShaderGL> SceneShader;
+   std::unique_ptr<SceneShaderGL> SceneShader;
    std::unique_ptr<PhotonMapGL> PhotonMap;
    std::unique_ptr<CanvasGL> Canvas;
    KdtreeBuild KdtreeBuilder;

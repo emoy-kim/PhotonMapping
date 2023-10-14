@@ -2,7 +2,7 @@
 
 RendererGL::RendererGL() :
    Window( nullptr ), Pause( false ), NeedToUpdate( true ), FrameWidth( 1024 ), FrameHeight( 1024 ),
-   ClickedPoint( -1, -1 ), MainCamera( std::make_unique<CameraGL>() ), SceneShader( std::make_unique<ShaderGL>() ),
+   ClickedPoint( -1, -1 ), MainCamera( std::make_unique<CameraGL>() ), SceneShader( std::make_unique<SceneShaderGL>() ),
    PhotonMap( std::make_unique<PhotonMapGL>() ), KdtreeBuilder(), PhotonMapBuilder()
 {
    Renderer = this;
@@ -263,30 +263,46 @@ void RendererGL::setShaders() const
       std::string(shader_directory_path + "/scene_shader.vert").c_str(),
       std::string(shader_directory_path + "/scene_shader.frag").c_str()
    );
-   SceneShader->setSceneUniformLocations( PhotonMap->getLightNum() );
    setKdtreeShaders();
    setPhotonMapShaders();
 }
 
 void RendererGL::drawScene() const
 {
+   using u = SceneShaderGL::UNIFORM;
+
    glViewport( 0, 0, FrameWidth, FrameHeight );
    glBindFramebuffer( GL_FRAMEBUFFER, 0 );
    glUseProgram( SceneShader->getShaderProgram() );
 
-   const LightGL* light = PhotonMap->getLight( 0 );
-   light->transferUniformsToShader( SceneShader.get(), 0 );
+   SceneShader->uniform1i( u::UseTexture, 0 );
+   SceneShader->uniform1i( u::UseLight, 1 );
+   SceneShader->uniform1i( u::LightNum, 1 );
 
-   SceneShader->uniform1i( "UseLight", 1 );
-   SceneShader->uniform1i( "UseTexture", 0 );
-   SceneShader->uniform1i( "LightNum", 1 );
+   const LightGL* light = PhotonMap->getLight( 0 );
+   SceneShader->uniform4fv( u::Lights + u::LightPosition, light->getCentroid() );
+   SceneShader->uniform4fv( u::Lights + u::LightEmissionColor, light->getEmissionColor() );
+   SceneShader->uniform4fv( u::Lights + u::LightAmbientColor, light->getAmbientReflectionColor() );
+   SceneShader->uniform4fv( u::Lights + u::LightDiffuseColor, light->getDiffuseReflectionColor() );
+   SceneShader->uniform4fv( u::Lights + u::LightSpecularColor, light->getSpecularReflectionColor() );
+   SceneShader->uniform3fv( u::Lights + u::SpotlightDirection, light->getNormal() );
+   SceneShader->uniform1f( u::Lights + u::SpotlightCutoffAngle, light->getSpotlightCutoffAngle() );
+   SceneShader->uniform1f( u::Lights + u::SpotlightFeather, light->getSpotlightFeather() );
+   SceneShader->uniform1f( u::Lights + u::FallOffRadius, light->getFallOffRadius() );
+
    const auto& objects = PhotonMap->getObjects();
    const auto& to_worlds = PhotonMap->getWorldMatrices();
    for (size_t i = 0; i < objects.size(); ++i) {
+      SceneShader->uniformMat4fv( u::WorldMatrix, to_worlds[i] );
+      SceneShader->uniformMat4fv( u::ViewMatrix, MainCamera->getViewMatrix() );
+      SceneShader->uniformMat4fv( u::ModelViewProjectionMatrix, MainCamera->getProjectionMatrix() * MainCamera->getViewMatrix() * to_worlds[i] );
+      SceneShader->uniform4fv( u::Material + u::MaterialEmissionColor, objects[i]->getEmissionColor() );
+      SceneShader->uniform4fv( u::Material + u::MaterialAmbientColor, objects[i]->getAmbientReflectionColor() );
+      SceneShader->uniform4fv( u::Material + u::MaterialDiffuseColor, objects[i]->getDiffuseReflectionColor() );
+      SceneShader->uniform4fv( u::Material + u::MaterialSpecularColor, objects[i]->getSpecularReflectionColor() );
+      SceneShader->uniform1f( u::Material + u::MaterialSpecularExponent, objects[i]->getSpecularReflectionExponent() );
       glBindVertexArray( objects[i]->getVAO() );
       glBindBuffer( GL_ELEMENT_ARRAY_BUFFER, objects[i]->getIBO() );
-      objects[i]->transferUniformsToShader( SceneShader.get() );
-      SceneShader->transferBasicTransformationUniforms( to_worlds[i], MainCamera.get() );
       glDrawElements( objects[i]->getDrawMode(), objects[i]->getIndexNum(), GL_UNSIGNED_INT, nullptr );
    }
 }
@@ -306,7 +322,7 @@ void RendererGL::play()
 
    setObjects();
    setShaders();
-   createPhotonMap();
+   //createPhotonMap();
    //buildKdtree();
 
    glfwShowWindow( Window );
