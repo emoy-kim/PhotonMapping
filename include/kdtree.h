@@ -62,7 +62,11 @@ public:
    [[nodiscard]] GLuint getSearchLists() const { return Search.Lists; }
    [[nodiscard]] GLuint getSearchListLengths() const { return Search.ListLengths; }
    [[nodiscard]] GLuint getQueries() const { return Search.Queries; }
-   static void releaseBuffer(GLuint buffer) { glDeleteBuffers( 1, &buffer ); }
+   static void releaseBuffer(GLuint& buffer)
+   {
+      glDeleteBuffers( 1, &buffer );
+      buffer = 0;
+   }
 
    template<typename T>
    [[nodiscard]] static GLuint addBuffer(int data_size)

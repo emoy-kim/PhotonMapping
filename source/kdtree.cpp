@@ -3,7 +3,7 @@
 KdtreeGL::KdtreeGL(int size) :
    Dim( 3 ), Size( size ), UniqueNum( 0 ), RootNode( -1 ), NodeNum( 0 ), Sort(), Root( 0 ), Coordinates( 0 ),
    LeftChildNumInWarp( 0 ), RightChildNumInWarp( 0 ), NodeSums( 0 ), MidReferences{ 0, 0 }, Reference( Dim + 2, 0 ),
-   Buffer( Dim + 2, 0 )
+   Buffer( Dim + 1, 0 )
 {
 }
 
@@ -44,22 +44,15 @@ void KdtreeGL::prepareSorting()
 
 void KdtreeGL::releaseSorting()
 {
-   glDeleteBuffers( 1, &Sort.LeftRanks );
-   glDeleteBuffers( 1, &Sort.RightRanks );
-   glDeleteBuffers( 1, &Sort.LeftLimits );
-   glDeleteBuffers( 1, &Sort.RightLimits );
-   glDeleteBuffers( 1, &Sort.Reference );
-   glDeleteBuffers( 1, &Sort.Buffer );
+   releaseBuffer( Sort.LeftRanks );
+   releaseBuffer( Sort.RightRanks );
+   releaseBuffer( Sort.LeftLimits );
+   releaseBuffer( Sort.RightLimits );
+   releaseBuffer( Sort.Reference );
+   releaseBuffer( Sort.Buffer );
    for (int i = 0; i <= Dim; ++i) {
-      glDeleteBuffers( 1, &Buffer[i] );
-      Buffer[i] = 0;
+      releaseBuffer( Buffer[i] );
    }
-   Sort.LeftRanks = 0;
-   Sort.RightRanks = 0;
-   Sort.LeftLimits = 0;
-   Sort.RightLimits = 0;
-   Sort.Reference = 0;
-   Sort.Buffer = 0;
 }
 
 void KdtreeGL::prepareBuilding()
@@ -73,14 +66,13 @@ void KdtreeGL::prepareBuilding()
 
 void KdtreeGL::releaseBuilding()
 {
-   glDeleteBuffers( 1, &LeftChildNumInWarp );
-   glDeleteBuffers( 1, &RightChildNumInWarp );
-   glDeleteBuffers( 1, &MidReferences[0] );
-   glDeleteBuffers( 1, &MidReferences[1] );
-   LeftChildNumInWarp = 0;
-   RightChildNumInWarp = 0;
-   MidReferences[0] = 0;
-   MidReferences[1] = 0;
+   releaseBuffer( LeftChildNumInWarp );
+   releaseBuffer( RightChildNumInWarp );
+   releaseBuffer( MidReferences[0] );
+   releaseBuffer( MidReferences[1] );
+   for (int i = 0; i <= Dim + 1; ++i) {
+      releaseBuffer( Reference[i] );
+   }
 }
 
 void KdtreeGL::prepareVerifying()
@@ -98,12 +90,9 @@ void KdtreeGL::prepareVerifying()
 
 void KdtreeGL::releaseVerifying()
 {
-   glDeleteBuffers( 1, &MidReferences[0] );
-   glDeleteBuffers( 1, &MidReferences[1] );
-   glDeleteBuffers( 1, &NodeSums );
-   MidReferences[0] = 0;
-   MidReferences[1] = 0;
-   NodeSums = 0;
+   releaseBuffer( MidReferences[0] );
+   releaseBuffer( MidReferences[1] );
+   releaseBuffer( NodeSums );
 }
 
 void KdtreeGL::prepareSearching(const std::vector<glm::vec3>& queries)
@@ -124,12 +113,9 @@ void KdtreeGL::prepareSearching(const std::vector<glm::vec3>& queries)
 
 void KdtreeGL::releaseSearching()
 {
-   glDeleteBuffers( 1, &Search.Lists );
-   glDeleteBuffers( 1, &Search.ListLengths );
-   glDeleteBuffers( 1, &Search.Queries );
-   Search.Lists = 0;
-   Search.ListLengths = 0;
-   Search.Queries = 0;
+   releaseBuffer( Search.Lists );
+   releaseBuffer( Search.ListLengths );
+   releaseBuffer( Search.Queries );
 }
 
 void KdtreeGL::prepareKNN(const std::vector<glm::vec3>& queries, int neighbor_num)
@@ -146,8 +132,6 @@ void KdtreeGL::prepareKNN(const std::vector<glm::vec3>& queries, int neighbor_nu
 
 void KdtreeGL::releaseKNN()
 {
-   glDeleteBuffers( 1, &Search.Lists );
-   glDeleteBuffers( 1, &Search.Queries );
-   Search.Lists = 0;
-   Search.Queries = 0;
+   releaseBuffer( Search.Lists );
+   releaseBuffer( Search.Queries );
 }
