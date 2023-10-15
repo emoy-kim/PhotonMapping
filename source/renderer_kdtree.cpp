@@ -64,24 +64,6 @@ void RendererGL::setKdtreeShaders() const
    KdtreeBuilder.SumNodeNum->setComputeShader(
       std::string(shader_directory_path + "/kdtree/sum_node_num.comp").c_str()
    );
-
-   KdtreeBuilder.Search->setComputeShader( std::string(shader_directory_path + "/kdtree/search.comp").c_str() );
-
-   KdtreeBuilder.CopyFoundPoints->setComputeShader(
-      std::string(shader_directory_path + "/kdtree/copy_found_points.comp").c_str()
-   );
-
-   KdtreeBuilder.InitializeKNN->setComputeShader(
-      std::string(shader_directory_path + "/kdtree/initialize_knn.comp").c_str()
-   );
-
-   KdtreeBuilder.FindNearestNeighbors->setComputeShader(
-      std::string(shader_directory_path + "/kdtree/find_nearest_neighbors.comp").c_str()
-   );
-
-   KdtreeBuilder.CopyEncodedFoundPoints->setComputeShader(
-      std::string(shader_directory_path + "/kdtree/copy_encoded_found_points.comp").c_str()
-   );
 }
 
 void RendererGL::sortByAxis(KdtreeGL* kdtree, int axis) const
@@ -254,8 +236,8 @@ void RendererGL::removeDuplicates(KdtreeGL* kdtree, int axis) const
    constexpr int segment = total_thread_num / KdtreeGL::WarpSize;
    const int size_per_warp = divideUp( size, segment );
    const GLuint coordinates = kdtree->getCoordinates();
-   const GLuint num_after_removal = KdtreeGL::addBuffer<int>( 1 );
-   const GLuint unique_num_in_warp = KdtreeGL::addBuffer<int>( segment );
+   GLuint num_after_removal = KdtreeGL::addBuffer<int>( 1 );
+   GLuint unique_num_in_warp = KdtreeGL::addBuffer<int>( segment );
    glUseProgram( KdtreeBuilder.RemoveDuplicates->getShaderProgram() );
    KdtreeBuilder.RemoveDuplicates->uniform1i( RemoveDuplicatesShaderGL::UNIFORM::SizePerWarp, size_per_warp );
    KdtreeBuilder.RemoveDuplicates->uniform1i( RemoveDuplicatesShaderGL::UNIFORM::Size, size );
@@ -488,36 +470,6 @@ void RendererGL::buildKdtree(KdtreeGL* kdtree, GLuint photon_buffer) const
 }
 
 #if 0
-void RendererGL::search()
-{
-   Object->prepareSearching( { query } );
-   const int block_num = divideUp( query_num, KdtreeGL::WarpSize );
-   glUseProgram( KdtreeBuilder.Search->getShaderProgram() );
-   KdtreeBuilder.Search->uniform1f( "SearchRadius", SearchRadius );
-   KdtreeBuilder.Search->uniform1i( "NodeIndex", Object->getRootNode() );
-   KdtreeBuilder.Search->uniform1i( "QueryNum", query_num );
-   KdtreeBuilder.Search->uniform1i( "Size", Object->getUniqueNum() );
-   KdtreeBuilder.Search->uniform1i( "Dim", Object->getDimension() );
-   glBindBufferBase( GL_SHADER_STORAGE_BUFFER, 0, Object->getSearchLists() );
-   glBindBufferBase( GL_SHADER_STORAGE_BUFFER, 1, Object->getSearchListLengths() );
-   glBindBufferBase( GL_SHADER_STORAGE_BUFFER, 2, Object->getRoot() );
-   glBindBufferBase( GL_SHADER_STORAGE_BUFFER, 3, Object->getCoordinates() );
-   glBindBufferBase( GL_SHADER_STORAGE_BUFFER, 4, Object->getQueries() );
-   glDispatchCompute( block_num, 1, 1 );
-   glMemoryBarrier( GL_SHADER_STORAGE_BARRIER_BIT );
-
-   glUseProgram( KdtreeBuilder.CopyFoundPoints->getShaderProgram() );
-   glBindBufferBase( GL_SHADER_STORAGE_BUFFER, 0, FoundPoints->getVBO() );
-   glBindBufferBase( GL_SHADER_STORAGE_BUFFER, 1, Object->getSearchLists() );
-   glBindBufferBase( GL_SHADER_STORAGE_BUFFER, 2, Object->getSearchListLengths() );
-   glBindBufferBase( GL_SHADER_STORAGE_BUFFER, 3, Object->getCoordinates() );
-   glBindBufferBase( GL_SHADER_STORAGE_BUFFER, 4, Object->getQueries() );
-   glDispatchCompute( block_num, 1, 1 );
-   glMemoryBarrier( GL_SHADER_STORAGE_BARRIER_BIT );
-
-   Object->releaseSearching();
-}
-
 void RendererGL::findNearestNeighbors()
 {
    Object->prepareKNN( { query }, NeighborNum );

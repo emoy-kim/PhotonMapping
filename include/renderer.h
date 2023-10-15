@@ -46,11 +46,6 @@ private:
       std::unique_ptr<PartitionFinalShaderGL> PartitionFinal;
       std::unique_ptr<VerifyShaderGL> Verify;
       std::unique_ptr<SumNodeNumShaderGL> SumNodeNum;
-      std::unique_ptr<SearchShaderGL> Search;
-      std::unique_ptr<CopyFoundPointsShaderGL> CopyFoundPoints;
-      std::unique_ptr<InitializeKNNShaderGL> InitializeKNN;
-      std::unique_ptr<FindNearestNeighborsShaderGL> FindNearestNeighbors;
-      std::unique_ptr<CopyEncodedFoundPointsShaderGL> CopyEncodedFoundPoints;
 
       KdtreeBuild() :
          Initialize( std::make_unique<InitializeShaderGL>() ),
@@ -69,22 +64,19 @@ private:
          CopyReference( std::make_unique<CopyReferenceShaderGL>() ),
          PartitionFinal( std::make_unique<PartitionFinalShaderGL>() ),
          Verify( std::make_unique<VerifyShaderGL>() ),
-         SumNodeNum( std::make_unique<SumNodeNumShaderGL>() ),
-         Search( std::make_unique<SearchShaderGL>() ),
-         CopyFoundPoints( std::make_unique<CopyFoundPointsShaderGL>() ),
-         InitializeKNN( std::make_unique<InitializeKNNShaderGL>() ),
-         FindNearestNeighbors( std::make_unique<FindNearestNeighborsShaderGL>() ),
-         CopyEncodedFoundPoints( std::make_unique<CopyEncodedFoundPointsShaderGL>() )
+         SumNodeNum( std::make_unique<SumNodeNumShaderGL>() )
          {}
    };
 
    struct PhotonMapBuild
    {
       std::unique_ptr<BuildPhotonMapShaderGL> BuildPhotonMap;
+      std::unique_ptr<VisualizePhotonMapShaderGL> VisualizePhotonMapShader;
 
       PhotonMapBuild() :
-         BuildPhotonMap( std::make_unique<BuildPhotonMapShaderGL>() )
-      {}
+         BuildPhotonMap( std::make_unique<BuildPhotonMapShaderGL>() ),
+         VisualizePhotonMapShader( std::make_unique<VisualizePhotonMapShaderGL>() )
+         {}
    };
 
    inline static RendererGL* Renderer = nullptr;
@@ -128,10 +120,10 @@ private:
    void build(KdtreeGL* kdtree) const;
    void verify(KdtreeGL* kdtree) const;
    void buildKdtree(KdtreeGL* kdtree, GLuint photon_buffer) const;
-   //void search();
    //void findNearestNeighbors();
 
    // renderer_photon.cpp
    void setPhotonMapShaders() const;
-   void createPhotonMap();
+   void createPhotonMap() const;
+   void visualizePhotonMap() const;
 };
