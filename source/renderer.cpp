@@ -252,8 +252,8 @@ void RendererGL::setObjects()
    };
    PhotonMap->setObjects( objects );
 
-   Canvas = std::make_unique<CanvasGL>();
-   Canvas->setCanvas( FrameWidth, FrameHeight, GL_RGBA8 );
+   GlobalPhotonMap = std::make_unique<ImageGL>();
+   GlobalPhotonMap->create( FrameWidth, FrameHeight );
 }
 
 void RendererGL::setShaders() const
@@ -330,6 +330,7 @@ void RendererGL::play()
    setObjects();
    setShaders();
    createPhotonMap();
+   visualizePhotonMap();
 
    glfwShowWindow( Window );
    while (!glfwWindowShouldClose( Window )) {

@@ -6,9 +6,13 @@ void RendererGL::setPhotonMapShaders() const
    PhotonMapBuilder.BuildPhotonMap->setComputeShader(
       std::string(shader_directory_path + "/photon_map/build_photon_map.comp").c_str()
    );
+
+   PhotonMapBuilder.VisualizePhotonMapShader->setComputeShader(
+      std::string(shader_directory_path + "/photon_map/visualize_photon_map.comp").c_str()
+   );
 }
 
-void RendererGL::createPhotonMap()
+void RendererGL::createPhotonMap() const
 {
    using u = BuildPhotonMapShaderGL::UNIFORM;
 
@@ -16,7 +20,7 @@ void RendererGL::createPhotonMap()
    std::seed_seq sequence{ std::chrono::system_clock::now().time_since_epoch().count() };
    sequence.generate( seed.begin(), seed.end() );
 
-   PhotonMap->prepareBuilding();
+   PhotonMap->setPhotonMap();
    const auto& to_worlds = PhotonMap->getWorldMatrices();
    const auto types = PhotonMap->getObjectMaterialTypes();
    const auto brdfs = PhotonMap->getBRDFs();
@@ -38,7 +42,30 @@ void RendererGL::createPhotonMap()
    glBindBufferBase( GL_SHADER_STORAGE_BUFFER, 7, PhotonMap->getObjectIndexSizeBuffer() );
    glDispatchCompute( PhotonMapGL::ThreadBlockNum, 1, 1 );
    glMemoryBarrier( GL_SHADER_STORAGE_BARRIER_BIT );
-   PhotonMap->releaseBuilding();
 
    buildKdtree( PhotonMap->getGlobalPhotonTree(), PhotonMap->getPhotonBuffer() );
+}
+
+void RendererGL::visualizePhotonMap() const
+{
+   using u = VisualizePhotonMapShaderGL::UNIFORM;
+
+   const auto& to_worlds = PhotonMap->getWorldMatrices();
+   glUseProgram( PhotonMapBuilder.VisualizePhotonMapShader->getShaderProgram() );
+   PhotonMapBuilder.VisualizePhotonMapShader->uniform1i( u::ObjectNum, PhotonMap->getObjectNum() );
+   PhotonMapBuilder.VisualizePhotonMapShader->uniformMat4fv( u::InverseViewMatrix, glm::inverse( MainCamera->getViewMatrix() ) );
+   PhotonMapBuilder.VisualizePhotonMapShader->uniformMat4fv( u::WorldMatrices, static_cast<int>(to_worlds.size()), to_worlds.data() );
+   glBindBufferBase( GL_SHADER_STORAGE_BUFFER, 0, PhotonMap->getPhotonBuffer() );
+   glBindBufferBase( GL_SHADER_STORAGE_BUFFER, 1, PhotonMap->getWorldBoundsBuffer() );
+   glBindBufferBase( GL_SHADER_STORAGE_BUFFER, 2, PhotonMap->getObjectVerticesBuffer() );
+   glBindBufferBase( GL_SHADER_STORAGE_BUFFER, 3, PhotonMap->getObjectNormalsBuffer() );
+   glBindBufferBase( GL_SHADER_STORAGE_BUFFER, 4, PhotonMap->getObjectIndicesBuffer() );
+   glBindBufferBase( GL_SHADER_STORAGE_BUFFER, 5, PhotonMap->getObjectVertexSizeBuffer() );
+   glBindBufferBase( GL_SHADER_STORAGE_BUFFER, 6, PhotonMap->getObjectIndexSizeBuffer() );
+   glBindImageTexture( 0, GlobalPhotonMap->getTextureID(), 0, GL_FALSE, 0, GL_READ_WRITE, GL_RGBA8 );
+   glDispatchCompute( divideUp( FrameWidth, 32 ), divideUp( FrameHeight, 32 ), 1 );
+   glMemoryBarrier( GL_SHADER_STORAGE_BARRIER_BIT | GL_SHADER_IMAGE_ACCESS_BARRIER_BIT );
+
+   writeTexture( GlobalPhotonMap->getTextureID(), FrameWidth, FrameHeight, "global_photon_map" );
+   PhotonMap->releasePhotonMap();
 }

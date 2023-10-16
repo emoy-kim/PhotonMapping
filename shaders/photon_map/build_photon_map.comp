@@ -1,6 +1,6 @@
 #version 460
 
-layout (local_size_x = 512, local_size_y = 1, local_size_z = 1) in;
+layout (local_size_x = 1024, local_size_y = 1, local_size_z = 1) in;
 
 struct Photon
 {
@@ -14,7 +14,9 @@ struct AreaLight
    float Area;
    vec3 Emission;
    vec3 Normal;
-   vec3 Vertices[3];
+   vec3 Vertex0;
+   vec3 Vertex1;
+   vec3 Vertex2;
 };
 
 struct Rect
@@ -49,13 +51,10 @@ const float one_over_pi = 0.318309886183790671537767526745028724f;
 
 struct IntersectionInfo
 {
-   int MaterialType;
-   float Distance;
-   vec2 Barycentric;
+   int ObjectIndex;
    vec3 Position;
    vec3 Normal;
    vec3 ShadingNormal;
-   vec3 BRDF;
 };
 
 float getRandomFloat(inout uint seed)
@@ -90,15 +89,16 @@ vec3 getSamplePointAroundAxis(inout float pdf, inout uint seed, in vec3 v)
 vec3 getSampleRayFromLight(inout vec3 ray_origin, inout vec3 ray_direction, inout uint seed)
 {
    // Currently, the number of lights is 2.
+   const int light_num = 2;
    int light_index = getRandomFloat( seed ) > 0.5f ? 0 : 1;
-   vec3 v0 = lights[light_index].Vertices[0];
-   vec3 v1 = lights[light_index].Vertices[1];
-   vec3 v2 = lights[light_index].Vertices[2];
+   vec3 v0 = lights[light_index].Vertex0;
+   vec3 v1 = lights[light_index].Vertex1;
+   vec3 v2 = lights[light_index].Vertex2;
    float a = getRandomFloat( seed );
    float b = getRandomFloat( seed );
    ray_origin = (one - a - b) * v0 + a * v1 + b * v2;
    vec3 normal = lights[light_index].Normal;
-   float pdf = one / lights[light_index].Area;
+   float pdf = one / (lights[light_index].Area * float(light_num));
    ray_direction = getSamplePointAroundAxis( pdf, seed, normal );
    return lights[light_index].Emission / pdf * abs( dot( ray_direction, normal ) );
 }
@@ -145,15 +145,12 @@ bool intersectWithBox(in vec3 ray_origin, in vec3 ray_direction, in vec3 min_poi
 }
 
 bool intersectWithTriangle(
-   inout IntersectionInfo intersection,
+   inout vec3 tuv,
    in vec3 ray_origin,
    in vec3 ray_direction,
    in vec3 p0,
    in vec3 p1,
-   in vec3 p2,
-   in vec3 n0,
-   in vec3 n1,
-   in vec3 n2
+   in vec3 p2
 )
 {
    vec3 e1 = p1 - p0;
@@ -172,43 +169,41 @@ bool intersectWithTriangle(
    if (v < zero || u + v > one) return false;
 
    float t = f * dot( e2, r );
-   if (t < zero) return false;
+   if (t <= zero) return false;
 
-   if (intersection.Distance <= t) return false;
-
-   intersection.Distance = t;
-   intersection.Barycentric = vec2(u, v);
-   intersection.Position = (one - u - v) * p0 + u * p1 + v * p2;
-   intersection.ShadingNormal = (one - u - v) * n0 + u * n1 + v * n2;
+   tuv = vec3(t, u, v);
    return true;
 }
 
 bool findIntersection(inout IntersectionInfo intersection, in vec3 ray_origin, in vec3 ray_direction)
 {
-   intersection.Distance = one / zero;
-
    bool intersect = false;
+   float distance = one / zero;
    int offset = 0, index_offset = 0;
    for (int i = 0; i < ObjectNum; ++i) {
       mat4 vector_transform = transpose( inverse( WorldMatrices[i] ) );
       if (intersectWithBox( ray_origin, ray_direction, world_bounds[i].MinPoint, world_bounds[i].MaxPoint )) {
          for (int j = 0; j < index_sizes[i]; j += 3) {
-            int k = 3 * (offset + int(indices[index_offset + j]));
-            vec3 p0 = vec3(WorldMatrices[i] * vec4(vertices[k], vertices[k + 1], vertices[k + 2], one));
-            vec3 n0 = normalize( vec3(vector_transform * vec4(normals[k], normals[k + 1], normals[k + 2], zero)) );
+            int k0 = 3 * (offset + int(indices[index_offset + j]));
+            int k1 = 3 * (offset + int(indices[index_offset + j + 1]));
+            int k2 = 3 * (offset + int(indices[index_offset + j + 2]));
+            vec3 p0 = vec3(WorldMatrices[i] * vec4(vertices[k0], vertices[k0 + 1], vertices[k0 + 2], one));
+            vec3 p1 = vec3(WorldMatrices[i] * vec4(vertices[k1], vertices[k1 + 1], vertices[k1 + 2], one));
+            vec3 p2 = vec3(WorldMatrices[i] * vec4(vertices[k2], vertices[k2 + 1], vertices[k2 + 2], one));
 
-            k = 3 * (offset + int(indices[index_offset + j + 1]));
-            vec3 p1 = vec3(WorldMatrices[i] * vec4(vertices[k], vertices[k + 1], vertices[k + 2], one));
-            vec3 n1 = normalize( vec3(vector_transform * vec4(normals[k], normals[k + 1], normals[k + 2], zero)) );
-
-            k = 3 * (offset + int(indices[index_offset + j + 2]));
-            vec3 p2 = vec3(WorldMatrices[i] * vec4(vertices[k], vertices[k + 1], vertices[k + 2], one));
-            vec3 n2 = normalize( vec3(vector_transform * vec4(normals[k], normals[k + 1], normals[k + 2], zero)) );
-            if (intersectWithTriangle( intersection, ray_origin, ray_direction, p0, p1, p2, n0, n1, n2 )) {
-               intersection.MaterialType = ObjectMaterialTypes[i];
-               intersection.BRDF = ObjectBRDFs[i];
-               intersection.Normal = n0;
-               intersect = true;
+            vec3 tuv;
+            if (intersectWithTriangle( tuv, ray_origin, ray_direction, p0, p1, p2 )) {
+               if (distance > tuv.x) {
+                  vec3 n0 = normalize( vec3(vector_transform * vec4(normals[k0], normals[k0 + 1], normals[k0 + 2], zero)) );
+                  vec3 n1 = normalize( vec3(vector_transform * vec4(normals[k1], normals[k1 + 1], normals[k1 + 2], zero)) );
+                  vec3 n2 = normalize( vec3(vector_transform * vec4(normals[k2], normals[k2 + 1], normals[k2 + 2], zero)) );
+                  distance = tuv.x;
+                  intersection.ObjectIndex = i;
+                  intersection.Normal = (n0 + n1 + n2) / 3.0f;
+                  intersection.Position = ray_origin + tuv.x * ray_direction;
+                  intersection.ShadingNormal = (one - tuv.y - tuv.z) * n0 + tuv.y * n1 + tuv.z * n2;
+                  intersect = true;
+               }
             }
          }
       }
@@ -234,51 +229,57 @@ vec3 getNextSampleRay(
    inout vec3 ray_origin,
    inout vec3 ray_direction,
    inout uint seed,
-   in IntersectionInfo intersection
+   inout IntersectionInfo intersection
 )
 {
    float pdf = one;
    vec3 incoming = -ray_direction, outgoing, brdf;
-   if (intersection.MaterialType == 0) {
+   if (ObjectMaterialTypes[intersection.ObjectIndex] == 0) {
       outgoing = getSamplePointAroundAxis( pdf, seed, intersection.ShadingNormal );
-      if (dot( incoming, intersection.ShadingNormal ) > zero) brdf = intersection.BRDF * one_over_pi;
-      else brdf = vec3(zero);
+      if (dot( incoming, intersection.ShadingNormal ) <= zero) brdf = vec3(zero);
+      else brdf = ObjectBRDFs[intersection.ObjectIndex] * one_over_pi;
    }
-   else if (intersection.MaterialType == 1) {
+   else if (ObjectMaterialTypes[intersection.ObjectIndex] == 1) {
       outgoing = reflect( -incoming, intersection.ShadingNormal );
-      brdf = intersection.BRDF / abs( dot( outgoing, intersection.ShadingNormal ) );
+      float d = abs( dot( outgoing, intersection.ShadingNormal ) );
+      brdf = d < 1e-5f ? vec3(zero) : ObjectBRDFs[intersection.ObjectIndex] / d;
    }
-   else if (intersection.MaterialType == 2) {
+   else if (ObjectMaterialTypes[intersection.ObjectIndex] == 2) {
       // need to update correctly ...
       outgoing = reflect( -incoming, intersection.ShadingNormal );
-      brdf = intersection.BRDF / abs( dot( outgoing, intersection.ShadingNormal ) );
+      float d = abs( dot( outgoing, intersection.ShadingNormal ) );
+      brdf = d < 1e-5f ? vec3(zero) : ObjectBRDFs[intersection.ObjectIndex] / d;
    }
 
    ray_origin = intersection.Position;
-   ray_direction = outgoing;
+   ray_direction = normalize( outgoing );
    return brdf * correctShadingNormal( outgoing, incoming, intersection.Normal, intersection.ShadingNormal ) / pdf;
 }
 
 void main()
 {
    int generated_num = 0;
-   int photons_to_generate = MaxGlobalPhotonNum / int(gl_WorkGroupSize.x * gl_NumWorkGroups.x);
+   int step = int(gl_WorkGroupSize.x * gl_NumWorkGroups.x);
+   int photons_to_generate = (MaxGlobalPhotonNum + step - 1) / step;
    int index = int(gl_GlobalInvocationID.x) * photons_to_generate;
    uint seed = (gl_GlobalInvocationID.x * 1973u + Seed * 9277u) | 1u;
-   while (generated_num < photons_to_generate) {
+   while (index < MaxGlobalPhotonNum) {
       vec3 ray_origin, ray_direction;
       vec3 power = getSampleRayFromLight( ray_origin, ray_direction, seed );
       for (int i = 0; i < MaxDepth; ++i) {
          if (any( lessThan( power, vec3(zero) ) )) break;
 
          IntersectionInfo intersection;
+         intersection.ObjectIndex = -1;
+         intersection.Position = intersection.Normal = intersection.ShadingNormal = vec3(zero);
          if (!findIntersection( intersection, ray_origin, ray_direction )) break;
 
-         if (intersection.MaterialType == 0) {
+         if (ObjectMaterialTypes[intersection.ObjectIndex] == 0) {
             photons[index + generated_num].Power = power;
             photons[index + generated_num].Position = intersection.Position;
             photons[index + generated_num].IncomingDirection = -ray_direction;
             generated_num++;
+            if (generated_num == photons_to_generate || index + generated_num >= MaxGlobalPhotonNum) return;
          }
 
          if (i > 0) {

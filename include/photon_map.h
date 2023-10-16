@@ -10,8 +10,7 @@ class PhotonMapGL final
 {
 public:
    static constexpr int ThreadBlockNum = 128;
-   static constexpr int SampleNum = 256;
-   static constexpr int MaxDepth = 64;
+   static constexpr int MaxDepth = 16;
    static constexpr int MaxGlobalPhotonNum = 1'048'576;
 
    struct Photon
@@ -28,23 +27,27 @@ public:
       alignas(4) float Area;
       alignas(16) glm::vec3 Emission;
       alignas(16) glm::vec3 Normal;
-      alignas(16) glm::vec3 Vertices[3];
+      alignas(16) glm::vec3 Vertex0;
+      alignas(16) glm::vec3 Vertex1;
+      alignas(16) glm::vec3 Vertex2;
 
-      AreaLight() : Area( 0.0f ), Emission(), Normal(), Vertices{} {}
+      AreaLight() : Area( 0.0f ), Emission(), Normal(), Vertex0(), Vertex1(), Vertex2() {}
       AreaLight(
          float area,
          const glm::vec3& emission,
          const glm::vec3& normal,
          const std::array<glm::vec3, 3>& vertices
-      ) : Area( area ), Emission( emission ), Normal( normal ), Vertices{ vertices[0], vertices[1], vertices[2] } {}
+      ) :
+         Area( area ), Emission( emission ), Normal( normal ), Vertex0( vertices[0] ), Vertex1( vertices[1] ),
+         Vertex2( vertices[2] ) {}
    };
 
    PhotonMapGL();
    ~PhotonMapGL();
 
    void setObjects(const std::vector<object_t>& objects);
-   void prepareBuilding();
-   void releaseBuilding();
+   void setPhotonMap();
+   void releasePhotonMap();
    [[nodiscard]] int getLightNum() const { return LightNum; }
    [[nodiscard]] int getObjectNum() const { return static_cast<int>(Objects.size()); }
    [[nodiscard]] const LightGL* getLight(int index) const

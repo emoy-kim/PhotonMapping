@@ -90,7 +90,8 @@ private:
    std::unique_ptr<CameraGL> MainCamera;
    std::unique_ptr<SceneShaderGL> SceneShader;
    std::unique_ptr<PhotonMapGL> PhotonMap;
-   std::unique_ptr<CanvasGL> Canvas;
+   std::unique_ptr<ImageGL> GlobalPhotonMap;
+   std::unique_ptr<ImageGL> CausticsPhotonMap;
    KdtreeBuild KdtreeBuilder;
    PhotonMapBuild PhotonMapBuilder;
 

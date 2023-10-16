@@ -145,7 +145,7 @@ void PhotonMapGL::setObjects(const std::vector<object_t>& objects)
    }
 }
 
-void PhotonMapGL::prepareBuilding()
+void PhotonMapGL::setPhotonMap()
 {
    assert( LightNum > 0 && PhotonBuffer == 0 && AreaLightBuffer == 0 && WorldBoundsBuffer == 0 );
    assert( ObjectVerticesBuffer == 0 && ObjectNormalsBuffer == 0 );
@@ -190,7 +190,7 @@ void PhotonMapGL::prepareBuilding()
    glNamedBufferStorage( PhotonBuffer, buffer_size, nullptr, GL_DYNAMIC_STORAGE_BIT );
 
    glCreateBuffers( 1, &AreaLightBuffer );
-   buffer_size = static_cast<int>(sizeof( AreaLight ));
+   buffer_size = static_cast<int>(area_lights.size() * sizeof( AreaLight ));
    glNamedBufferStorage( AreaLightBuffer, buffer_size, nullptr, GL_DYNAMIC_STORAGE_BIT );
    glNamedBufferSubData( AreaLightBuffer, 0, buffer_size, area_lights.data() );
 
@@ -225,7 +225,7 @@ void PhotonMapGL::prepareBuilding()
    GlobalPhotonTree = std::make_shared<KdtreeGL>( MaxGlobalPhotonNum );
 }
 
-void PhotonMapGL::releaseBuilding()
+void PhotonMapGL::releasePhotonMap()
 {
    glDeleteBuffers( 1, &AreaLightBuffer );
    glDeleteBuffers( 1, &WorldBoundsBuffer );
