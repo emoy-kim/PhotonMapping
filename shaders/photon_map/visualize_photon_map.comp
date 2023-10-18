@@ -1,0 +1,297 @@
+#version 460
+
+layout (local_size_x = 32, local_size_y = 32, local_size_z = 1) in;
+
+layout (rgba8, binding = 0) uniform image2D PhotonMap;
+
+struct Photon
+{
+   vec3 Power;
+   vec3 Position;
+   vec3 IncomingDirection;
+};
+
+struct KdtreeNode
+{
+   int Index;
+   int ParentIndex;
+   int LeftChildIndex;
+   int RightChildIndex;
+};
+
+struct Rect
+{
+   vec3 MinPoint;
+   vec3 MaxPoint;
+};
+
+layout (binding = 0, std430) buffer Photons { Photon photons[]; };
+layout (binding = 1, std430) buffer Root { KdtreeNode root[]; };
+layout (binding = 2, std430) buffer Coordinates { float coordinates[]; };
+layout (binding = 3, std430) buffer WorldBounds { Rect world_bounds[]; };
+layout (binding = 4, std430) buffer Vertices { float vertices[]; };
+layout (binding = 5, std430) buffer Normals { float normals[]; };
+layout (binding = 6, std430) buffer Indices { uint indices[]; };
+layout (binding = 7, std430) buffer VertexSizes { int vertex_sizes[]; };
+layout (binding = 8, std430) buffer IndexSizes { int index_sizes[]; };
+
+layout (location = 0) uniform int NodeIndex;
+layout (location = 1) uniform int Size;
+layout (location = 2) uniform int Dim;
+layout (location = 3) uniform int ObjectNum;
+layout (location = 4) uniform mat4 InverseViewMatrix;
+
+#define MAX_OBJECT_NUM 10
+layout (location = 5) uniform mat4 WorldMatrices[MAX_OBJECT_NUM];
+
+const float zero = 0.0f;
+const float one = 1.0f;
+const float two_pi = 6.28318530717958647692528676655900576f;
+const float one_over_pi = 0.318309886183790671537767526745028724f;
+
+struct IntersectionInfo
+{
+   int ObjectIndex;
+   vec3 Position;
+   vec3 Normal;
+   vec3 ShadingNormal;
+};
+
+float getRandomFloat(inout uint seed)
+{
+   seed = (seed ^ 61u) ^ (seed >> 16u);
+   seed *= 9u;
+   seed = seed ^ (seed >> 4u);
+   seed *= 0x27d4eb2du;
+   seed = seed ^ (seed >> 15u);
+   return float(seed) / 4294967296.0f;
+}
+
+// this hemisphere is towards the y-axis, and its lower plane is the xz-plane.
+vec3 getRandomPointInUnitHemisphere(inout float pdf, inout uint seed)
+{
+   float phi = two_pi * getRandomFloat( seed ); // [0, 2pi]
+   float theta = acos( 2.0f * getRandomFloat( seed ) - one ) * 0.5f; // [0, pi/2]
+   float cos_theta = cos( theta );
+   pdf *= cos_theta * one_over_pi;
+   return vec3(cos( phi ) * sin( theta ), cos_theta, sin( phi ) * sin( theta ));
+}
+
+vec3 getSamplePointAroundAxis(inout float pdf, inout uint seed, in vec3 v)
+{
+   vec3 u = abs( v.y ) < 0.9f ?
+      normalize( cross( v, vec3(zero, one, zero) ) ) :
+      normalize( cross( v, vec3(zero, zero, one) ) );
+   vec3 n = normalize( cross( u, v ) );
+   return mat3(u, v, n) * getRandomPointInUnitHemisphere( pdf, seed );
+}
+
+bool intersectWithBox(in vec3 ray_origin, in vec3 ray_direction, in vec3 min_point, in vec3 max_point)
+{
+   float exit = one / zero;
+   float enter = -one / zero;
+   if (abs( ray_direction.x ) > 0.001f) {
+      float t_min = (min_point.x - ray_origin.x) / ray_direction.x;
+      float t_max = (max_point.x - ray_origin.x) / ray_direction.x;
+      float t_enter = min( t_min, t_max );
+      float t_exit = max( t_min, t_max );
+      if (t_enter > enter) enter = t_enter;
+      if (t_exit < exit) exit = t_exit;
+      if (enter > exit || exit < zero) return false;
+   }
+   else if (ray_origin.x < min_point.x || max_point.x < ray_origin.x) return false;
+
+   if (abs( ray_direction.y ) > 0.001f) {
+      float t_min = (min_point.y - ray_origin.y) / ray_direction.y;
+      float t_max = (max_point.y - ray_origin.y) / ray_direction.y;
+      float t_enter = min( t_min, t_max );
+      float t_exit = max( t_min, t_max );
+      if (t_enter > enter) enter = t_enter;
+      if (t_exit < exit) exit = t_exit;
+      if (enter > exit || exit < zero) return false;
+   }
+   else if (ray_origin.y < min_point.y || max_point.y < ray_origin.y) return false;
+
+   if (abs( ray_direction.z ) > 0.001f) {
+      float t_min = (min_point.z - ray_origin.z) / ray_direction.z;
+      float t_max = (max_point.z - ray_origin.z) / ray_direction.z;
+      float t_enter = min( t_min, t_max );
+      float t_exit = max( t_min, t_max );
+      if (t_enter > enter) enter = t_enter;
+      if (t_exit < exit) exit = t_exit;
+      if (enter > exit || exit < zero) return false;
+   }
+   else if (ray_origin.z < min_point.z || max_point.z < ray_origin.z) return false;
+
+   //distance = enter > zero ? enter : exit;
+   return true;
+}
+
+bool intersectWithTriangle(
+   inout vec3 tuv,
+   in vec3 ray_origin,
+   in vec3 ray_direction,
+   in vec3 p0,
+   in vec3 p1,
+   in vec3 p2
+)
+{
+   vec3 e1 = p1 - p0;
+   vec3 e2 = p2 - p0;
+   vec3 q = cross( ray_direction, e2 );
+   float det = dot( e1, q );
+   if (abs( det ) < 1e-5f) return false;
+
+   float f = one / det;
+   vec3 s = ray_origin - p0;
+   float u = f * dot( s, q );
+   if (u < zero) return false;
+
+   vec3 r = cross( s, e1 );
+   float v = f * dot( ray_direction, r );
+   if (v < zero || u + v > one) return false;
+
+   float t = f * dot( e2, r );
+   if (t <= zero) return false;
+
+   tuv = vec3(t, u, v);
+   return true;
+}
+
+bool findIntersection(inout IntersectionInfo intersection, in vec3 ray_origin, in vec3 ray_direction)
+{
+   bool intersect = false;
+   float distance = one / zero;
+   int offset = 0, index_offset = 0;
+   for (int i = 0; i < ObjectNum; ++i) {
+      mat4 vector_transform = transpose( inverse( WorldMatrices[i] ) );
+      if (intersectWithBox( ray_origin, ray_direction, world_bounds[i].MinPoint, world_bounds[i].MaxPoint )) {
+         for (int j = 0; j < index_sizes[i]; j += 3) {
+            int k0 = 3 * (offset + int(indices[index_offset + j]));
+            int k1 = 3 * (offset + int(indices[index_offset + j + 1]));
+            int k2 = 3 * (offset + int(indices[index_offset + j + 2]));
+            vec3 p0 = vec3(WorldMatrices[i] * vec4(vertices[k0], vertices[k0 + 1], vertices[k0 + 2], one));
+            vec3 p1 = vec3(WorldMatrices[i] * vec4(vertices[k1], vertices[k1 + 1], vertices[k1 + 2], one));
+            vec3 p2 = vec3(WorldMatrices[i] * vec4(vertices[k2], vertices[k2 + 1], vertices[k2 + 2], one));
+
+            vec3 tuv;
+            if (intersectWithTriangle( tuv, ray_origin, ray_direction, p0, p1, p2 )) {
+               if (distance > tuv.x) {
+                  vec3 n0 = normalize( vec3(vector_transform * vec4(normals[k0], normals[k0 + 1], normals[k0 + 2], zero)) );
+                  vec3 n1 = normalize( vec3(vector_transform * vec4(normals[k1], normals[k1 + 1], normals[k1 + 2], zero)) );
+                  vec3 n2 = normalize( vec3(vector_transform * vec4(normals[k2], normals[k2 + 1], normals[k2 + 2], zero)) );
+                  distance = tuv.x;
+                  intersection.ObjectIndex = i;
+                  intersection.Normal = (n0 + n1 + n2) / 3.0f;
+                  intersection.Position = ray_origin + tuv.x * ray_direction;
+                  intersection.ShadingNormal = (one - tuv.y - tuv.z) * n0 + tuv.y * n1 + tuv.z * n2;
+                  intersect = true;
+               }
+            }
+         }
+      }
+      offset += vertex_sizes[i];
+      index_offset += index_sizes[i];
+   }
+   return intersect;
+}
+
+int findNearestNeighbor(inout float distance, in float queries[3])
+{
+   int depth = 0;
+   int prev = -1;
+   int curr = NodeIndex;
+   int found_index = -1;
+   float found_distance = one / zero;
+   while (curr >= 0) {
+      int parent = root[curr].ParentIndex;
+      if (curr >= Size) {
+         prev = curr;
+         curr = parent;
+         continue;
+      }
+
+      bool from_child = prev >= 0 && (prev == root[curr].LeftChildIndex || prev == root[curr].RightChildIndex);
+      if (!from_child) {
+         float squared_distance = zero;
+         for (int d = 0; d < Dim; ++d) {
+            float x = queries[d] - coordinates[root[curr].Index * Dim + d];
+            squared_distance += x * x;
+         }
+         if (squared_distance <= found_distance) {
+            found_index = curr;
+            found_distance = squared_distance;
+         }
+      }
+
+      int axis = depth % Dim;
+      float t = queries[axis] - coordinates[root[curr].Index * Dim + axis];
+      bool right_priority = t > zero;
+      int far_child = right_priority ? root[curr].LeftChildIndex : root[curr].RightChildIndex;
+      int close_child = right_priority ? root[curr].RightChildIndex : root[curr].LeftChildIndex;
+
+      int next = -1;
+      if (prev >= 0 && prev == close_child) {
+         if (far_child >= 0 && (t == zero || t * t <= found_distance)) {
+            next = far_child;
+            depth++;
+         }
+         else {
+            next = parent;
+            depth--;
+         }
+      }
+       else if (prev >= 0 && prev == far_child) {
+         next = parent;
+         depth--;
+      }
+      else if (prev < 0 || prev == parent) {
+         if (close_child < 0 && far_child < 0) {
+            next = parent;
+            depth--;
+         }
+         else if (close_child < 0) {
+            next = far_child;
+            depth++;
+         }
+         else {
+            next = close_child;
+            depth++;
+         }
+      }
+
+      prev = curr;
+      curr = next;
+   }
+
+   distance = sqrt( found_distance );
+   return found_index;
+}
+
+void main()
+{
+   int x = int(gl_GlobalInvocationID.x);
+   int y = int(gl_GlobalInvocationID.y);
+   ivec2 image_size = imageSize( PhotonMap );
+   if (x >= image_size.x || y >= image_size.y) return;
+
+   vec3 color = vec3(zero);
+   vec3 ray_origin = vec3(InverseViewMatrix[3]);
+   float u = (2.0f * float(x) - float(image_size.x)) / float(image_size.y);
+   float v = (2.0f * float(y) - float(image_size.y)) / float(image_size.y);
+   vec3 ray_direction = normalize( vec3(InverseViewMatrix * vec4(u, v, -one, one)) - ray_origin );
+
+   IntersectionInfo intersection;
+   intersection.ObjectIndex = -1;
+   intersection.Position = intersection.Normal = intersection.ShadingNormal = vec3(zero);
+   if (!findIntersection( intersection, ray_origin, ray_direction )) {
+      imageStore( PhotonMap, ivec2(x, y), vec4(color, one) );
+      return;
+   }
+
+   float distance;
+   float queries[3] = { intersection.Position.x, intersection.Position.y, intersection.Position.z };
+   int index = findNearestNeighbor( distance, queries );
+   if (index >= 0 && distance < 10.0f) color = photons[index].Power;
+   imageStore( PhotonMap, ivec2(x, y), vec4(color, one) );
+}
