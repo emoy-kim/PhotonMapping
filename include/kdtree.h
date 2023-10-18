@@ -1,6 +1,6 @@
 #pragma once
 
-#include "object.h"
+#include "base.h"
 
 struct KdtreeNodeGL
 {

@@ -11,12 +11,12 @@ struct Photon
 
 struct AreaLight
 {
-   float Area;
    vec3 Emission;
    vec3 Normal;
    vec3 Vertex0;
    vec3 Vertex1;
    vec3 Vertex2;
+   float Area;
 };
 
 struct Rect
@@ -83,7 +83,8 @@ vec3 getSamplePointAroundAxis(inout float pdf, inout uint seed, in vec3 v)
       normalize( cross( v, vec3(zero, one, zero) ) ) :
       normalize( cross( v, vec3(zero, zero, one) ) );
    vec3 n = normalize( cross( u, v ) );
-   return mat3(u, v, n) * getRandomPointInUnitHemisphere( pdf, seed );
+   //return mat3(u, v, n) * getRandomPointInUnitHemisphere( pdf, seed );
+   return v + 0.02f * getRandomPointInUnitHemisphere( pdf, seed );
 }
 
 vec3 getSampleRayFromLight(inout vec3 ray_origin, inout vec3 ray_direction, inout uint seed)
@@ -263,7 +264,7 @@ void main()
    int photons_to_generate = (MaxGlobalPhotonNum + step - 1) / step;
    int index = int(gl_GlobalInvocationID.x) * photons_to_generate;
    uint seed = (gl_GlobalInvocationID.x * 1973u + Seed * 9277u) | 1u;
-   while (index < MaxGlobalPhotonNum) {
+   while (true) {
       vec3 ray_origin, ray_direction;
       vec3 power = getSampleRayFromLight( ray_origin, ray_direction, seed );
       for (int i = 0; i < MaxDepth; ++i) {

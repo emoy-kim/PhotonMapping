@@ -24,12 +24,12 @@ public:
 
    struct AreaLight
    {
-      alignas(4) float Area;
       alignas(16) glm::vec3 Emission;
       alignas(16) glm::vec3 Normal;
       alignas(16) glm::vec3 Vertex0;
       alignas(16) glm::vec3 Vertex1;
       alignas(16) glm::vec3 Vertex2;
+      alignas(4) float Area;
 
       AreaLight() : Area( 0.0f ), Emission(), Normal(), Vertex0(), Vertex1(), Vertex2() {}
       AreaLight(
@@ -48,7 +48,6 @@ public:
    void setObjects(const std::vector<object_t>& objects);
    void setPhotonMap();
    void releasePhotonMap();
-   [[nodiscard]] int getLightNum() const { return LightNum; }
    [[nodiscard]] int getObjectNum() const { return static_cast<int>(Objects.size()); }
    [[nodiscard]] const LightGL* getLight(int index) const
    {
@@ -76,7 +75,6 @@ public:
    [[nodiscard]] GLuint getObjectIndexSizeBuffer() const { return ObjectIndexSizeBuffer; }
 
 private:
-   int LightNum;
    std::vector<int> LightIndices;
    std::shared_ptr<KdtreeGL> GlobalPhotonTree;
    std::vector<std::shared_ptr<ObjectGL>> Objects;

@@ -1,7 +1,7 @@
 #include "photon_map.h"
 
 PhotonMapGL::PhotonMapGL() :
-   LightNum( 0 ), PhotonBuffer( 0 ), AreaLightBuffer( 0 ), WorldBoundsBuffer( 0 ), ObjectVerticesBuffer( 0 ),
+   PhotonBuffer( 0 ), AreaLightBuffer( 0 ), WorldBoundsBuffer( 0 ), ObjectVerticesBuffer( 0 ),
    ObjectNormalsBuffer( 0 ), ObjectIndicesBuffer( 0 ), ObjectVertexSizeBuffer( 0 ), ObjectIndexSizeBuffer( 0 )
 {
 }
@@ -111,7 +111,6 @@ void PhotonMapGL::separateMaterialFile(
 
 void PhotonMapGL::setObjects(const std::vector<object_t>& objects)
 {
-   LightNum = 0;
    Objects.clear();
    ToWorlds.clear();
    WorldBounds.clear();
@@ -122,7 +121,6 @@ void PhotonMapGL::setObjects(const std::vector<object_t>& objects)
    for (size_t i = 0; i < objects.size(); ++i) {
       const auto object_type = std::get<2>( objects[i] );
       if (object_type == ObjectGL::TYPE::LIGHT) {
-         LightNum++;
          LightIndices.emplace_back( i );
          Objects[i] = std::make_shared<LightGL>();
          Objects[i]->setObjectWithTransform(
@@ -147,7 +145,7 @@ void PhotonMapGL::setObjects(const std::vector<object_t>& objects)
 
 void PhotonMapGL::setPhotonMap()
 {
-   assert( LightNum > 0 && PhotonBuffer == 0 && AreaLightBuffer == 0 && WorldBoundsBuffer == 0 );
+   assert( PhotonBuffer == 0 && AreaLightBuffer == 0 && WorldBoundsBuffer == 0 );
    assert( ObjectVerticesBuffer == 0 && ObjectNormalsBuffer == 0 );
    assert( ObjectVertexSizeBuffer == 0 && ObjectIndexSizeBuffer == 0 );
 

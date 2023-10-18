@@ -332,12 +332,12 @@ void RendererGL::play()
    createPhotonMap();
    visualizePhotonMap();
 
-   glfwShowWindow( Window );
+   /*glfwShowWindow( Window );
    while (!glfwWindowShouldClose( Window )) {
       if (!Pause) render();
 
       glfwSwapBuffers( Window );
       glfwPollEvents();
    }
-   glfwDestroyWindow( Window );
+   glfwDestroyWindow( Window );*/
 }

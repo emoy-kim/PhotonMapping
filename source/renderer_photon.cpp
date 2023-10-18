@@ -50,18 +50,24 @@ void RendererGL::visualizePhotonMap() const
 {
    using u = VisualizePhotonMapShaderGL::UNIFORM;
 
+   const KdtreeGL* kdtree = PhotonMap->getGlobalPhotonTree();
    const auto& to_worlds = PhotonMap->getWorldMatrices();
    glUseProgram( PhotonMapBuilder.VisualizePhotonMapShader->getShaderProgram() );
+   PhotonMapBuilder.VisualizePhotonMapShader->uniform1i( u::NodeIndex, kdtree->getRootNode() );
+   PhotonMapBuilder.VisualizePhotonMapShader->uniform1i( u::Size, kdtree->getUniqueNum() );
+   PhotonMapBuilder.VisualizePhotonMapShader->uniform1i( u::Dim, kdtree->getDimension() );
    PhotonMapBuilder.VisualizePhotonMapShader->uniform1i( u::ObjectNum, PhotonMap->getObjectNum() );
    PhotonMapBuilder.VisualizePhotonMapShader->uniformMat4fv( u::InverseViewMatrix, glm::inverse( MainCamera->getViewMatrix() ) );
    PhotonMapBuilder.VisualizePhotonMapShader->uniformMat4fv( u::WorldMatrices, static_cast<int>(to_worlds.size()), to_worlds.data() );
    glBindBufferBase( GL_SHADER_STORAGE_BUFFER, 0, PhotonMap->getPhotonBuffer() );
-   glBindBufferBase( GL_SHADER_STORAGE_BUFFER, 1, PhotonMap->getWorldBoundsBuffer() );
-   glBindBufferBase( GL_SHADER_STORAGE_BUFFER, 2, PhotonMap->getObjectVerticesBuffer() );
-   glBindBufferBase( GL_SHADER_STORAGE_BUFFER, 3, PhotonMap->getObjectNormalsBuffer() );
-   glBindBufferBase( GL_SHADER_STORAGE_BUFFER, 4, PhotonMap->getObjectIndicesBuffer() );
-   glBindBufferBase( GL_SHADER_STORAGE_BUFFER, 5, PhotonMap->getObjectVertexSizeBuffer() );
-   glBindBufferBase( GL_SHADER_STORAGE_BUFFER, 6, PhotonMap->getObjectIndexSizeBuffer() );
+   glBindBufferBase( GL_SHADER_STORAGE_BUFFER, 1, kdtree->getRoot() );
+   glBindBufferBase( GL_SHADER_STORAGE_BUFFER, 2, kdtree->getCoordinates() );
+   glBindBufferBase( GL_SHADER_STORAGE_BUFFER, 3, PhotonMap->getWorldBoundsBuffer() );
+   glBindBufferBase( GL_SHADER_STORAGE_BUFFER, 4, PhotonMap->getObjectVerticesBuffer() );
+   glBindBufferBase( GL_SHADER_STORAGE_BUFFER, 5, PhotonMap->getObjectNormalsBuffer() );
+   glBindBufferBase( GL_SHADER_STORAGE_BUFFER, 6, PhotonMap->getObjectIndicesBuffer() );
+   glBindBufferBase( GL_SHADER_STORAGE_BUFFER, 7, PhotonMap->getObjectVertexSizeBuffer() );
+   glBindBufferBase( GL_SHADER_STORAGE_BUFFER, 8, PhotonMap->getObjectIndexSizeBuffer() );
    glBindImageTexture( 0, GlobalPhotonMap->getTextureID(), 0, GL_FALSE, 0, GL_READ_WRITE, GL_RGBA8 );
    glDispatchCompute( divideUp( FrameWidth, 32 ), divideUp( FrameHeight, 32 ), 1 );
    glMemoryBarrier( GL_SHADER_STORAGE_BARRIER_BIT | GL_SHADER_IMAGE_ACCESS_BARRIER_BIT );
