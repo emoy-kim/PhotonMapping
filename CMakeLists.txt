@@ -18,6 +18,8 @@ set(
 		source/renderer.cpp
 		source/renderer_kdtree.cpp
 		source/renderer_photon.cpp
+		source/host/kdtree.cpp
+		source/host/photon_map.cpp
 )
 
 configure_file(include/project_constants.h.in ${PROJECT_BINARY_DIR}/project_constants.h @ONLY)
