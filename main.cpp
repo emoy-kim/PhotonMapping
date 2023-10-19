@@ -1,7 +1,7 @@
-#include "host/photon_map.h"
+#include "cuda/photon_map.cuh"
 #include "renderer.h"
 
-void testHost()
+void testCUDA()
 {
    const glm::mat4 cornell_box_scale = glm::scale( glm::mat4(1.0f), glm::vec3(300.0f) );
    const std::string sample_directory_path = std::string(CMAKE_SOURCE_DIR) + "/samples";
@@ -56,15 +56,16 @@ void testHost()
       )
    };
 
-   PhotonMap photon_map;
+   cuda::PhotonMap photon_map;
    photon_map.setObjects( objects );
    photon_map.setLights( lights );
-
+   photon_map.createPhotonMap();
+   //photon_map.visualizePhotonMap( 1024, 1024 );
 }
 
 int main()
 {
-   testHost();
+   testCUDA();
 
    //RendererGL renderer;
    //renderer.play();
