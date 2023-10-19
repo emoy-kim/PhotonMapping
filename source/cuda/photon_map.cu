@@ -459,6 +459,18 @@ namespace cuda
       }
    }
 
+   __global__
+   void cuPrepareKdtree(float* coordinates, Photon* photons, int size)
+   {
+      const auto index = static_cast<int>(blockIdx.x * blockDim.x + threadIdx.x);
+      const auto step = static_cast<int>(blockDim.x * gridDim.x);
+      for (int i = index; i < size; i += step) {
+         coordinates[3 * i] = photons[i].Position.x;
+         coordinates[3 * i + 1] = photons[i].Position.y;
+         coordinates[3 * i + 2] = photons[i].Position.z;
+      }
+   }
+
    PhotonMap::PhotonMap() : Device()
    {
    }
@@ -547,11 +559,12 @@ namespace cuda
       );
       std::cout << " >> Created Photon Map\n";
 
-      // make device coordinates ...
-
-      //std::cout << " >> Build Global Photon Map ...\n";
-      //GlobalPhotonTree = std::make_shared<KdtreeCUDA>( glm::value_ptr( coordinates[0] ), size, 3 );
-      //std::cout << " >> Built Global Photon Map\n";
+      std::cout << " >> Build Global Photon Map ...\n";
+      GlobalPhotonTree = std::make_shared<KdtreeCUDA>( MaxGlobalPhotonNum, 3 );
+      float* coordinates = GlobalPhotonTree->prepareDeviceCoordinatesPtr();
+      cuPrepareKdtree<<<block_num, thread_num>>>( coordinates, Device.GlobalPhotonsPtr, MaxGlobalPhotonNum );
+      GlobalPhotonTree->create();
+      std::cout << " >> Built Global Photon Map\n";
    }
 
    void PhotonMap::findNormals(

@@ -60,9 +60,11 @@ namespace cuda
    class KdtreeCUDA final
    {
    public:
-      explicit KdtreeCUDA(node_type* device_coordinates, int size, int dim);
+      explicit KdtreeCUDA(int size, int dim);
       ~KdtreeCUDA();
 
+      [[nodiscard]] node_type* prepareDeviceCoordinatesPtr();
+      void create();
       void search(
          std::vector<std::vector<int>>& founds,
          const node_type* queries,
@@ -119,8 +121,6 @@ namespace cuda
       int NodeNum;
       CUDADevice Device;
 
-      void prepareCUDA();
-      void initialize(const node_type* coordinates, int size);
       void initializeReference(int axis);
       void sortByAxis(int axis);
       [[nodiscard]] int removeDuplicates(int axis) const;
@@ -129,7 +129,6 @@ namespace cuda
       void partitionDimensionFinal(int axis, int depth);
       void build();
       [[nodiscard]] int verify();
-      void create();
    };
 }
 #endif

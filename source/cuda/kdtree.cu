@@ -22,11 +22,18 @@ namespace cuda
       return 1 << (bits - __clz( x - 1 ));
    }
 
-   KdtreeCUDA::KdtreeCUDA(node_type* device_coordinates, int size, int dim) :
-      Dim( dim ), TupleNum( size ), NodeNum( 0 )
+   KdtreeCUDA::KdtreeCUDA(int size, int dim) : Dim( dim ), TupleNum( size ), NodeNum( 0 )
    {
-      prepareCUDA();
-      create();
+      int device_num = 0;
+      CHECK_CUDA( cudaGetDeviceCount( &device_num ) );
+      if( device_num <= 0 ) throw std::runtime_error( "cuda device not found\n" );
+
+      Device.ID = 0;
+      Device.Buffer.resize( Dim + 1, nullptr );
+      Device.Reference.resize( Dim + 2, nullptr );
+
+      CHECK_CUDA( cudaSetDevice( Device.ID ) );
+      CHECK_CUDA( cudaStreamCreate( &Device.Stream ) );
    }
 
    KdtreeCUDA::~KdtreeCUDA()
@@ -46,20 +53,6 @@ namespace cuda
       cudaStreamDestroy( Device.Stream );
    }
 
-   void KdtreeCUDA::prepareCUDA()
-   {
-      int device_num = 0;
-      CHECK_CUDA( cudaGetDeviceCount( &device_num ) );
-      if( device_num <= 0 ) throw std::runtime_error( "cuda device not found\n" );
-
-      Device.ID = 0;
-      Device.Buffer.resize( Dim + 1, nullptr );
-      Device.Reference.resize( Dim + 2, nullptr );
-
-      CHECK_CUDA( cudaSetDevice( Device.ID ) );
-      CHECK_CUDA( cudaStreamCreate( &Device.Stream ) );
-   }
-
    __global__
    void cuInitialize(KdtreeNode* root, int size)
    {
@@ -71,38 +64,6 @@ namespace cuda
          root[i].LeftChildIndex = -1;
          root[i].RightChildIndex = -1;
       }
-   }
-
-   void KdtreeCUDA::initialize(const node_type* coordinates, int size)
-   {
-      assert( Device.Root == nullptr );
-      assert( Device.CoordinatesDevicePtr == nullptr );
-
-      CHECK_CUDA(
-         cudaMalloc(
-            reinterpret_cast<void**>(&Device.CoordinatesDevicePtr),
-            sizeof( node_type ) * Dim * (size + 1)
-         )
-      );
-      CHECK_CUDA(
-         cudaMemcpyAsync(
-            Device.CoordinatesDevicePtr, coordinates, sizeof( node_type ) * Dim * size,
-            cudaMemcpyHostToDevice, Device.Stream
-         )
-      );
-
-      node_type max_value[Dim];
-      for (int i = 0; i < Dim; ++i) max_value[i] = std::numeric_limits<node_type>::max();
-      CHECK_CUDA(
-         cudaMemcpyAsync(
-            Device.CoordinatesDevicePtr + size * Dim, max_value, sizeof( node_type ) * Dim,
-            cudaMemcpyHostToDevice, Device.Stream
-         )
-      );
-
-      CHECK_CUDA( cudaMalloc( reinterpret_cast<void**>(&Device.Root), sizeof( KdtreeNode ) * size ) );
-
-      cuInitialize<<<ThreadBlockNum, ThreadNum, 0, Device.Stream>>>( Device.Root, size );
    }
 
    __global__
@@ -1480,7 +1441,11 @@ namespace cuda
 
    void KdtreeCUDA::create()
    {
-      initialize( Coordinates, TupleNum );
+      assert( Device.Root == nullptr );
+      assert( Device.CoordinatesDevicePtr != nullptr );
+
+      CHECK_CUDA( cudaMalloc( reinterpret_cast<void**>(&Device.Root), sizeof( KdtreeNode ) * TupleNum ) );
+      cuInitialize<<<ThreadBlockNum, ThreadNum, 0, Device.Stream>>>( Device.Root, TupleNum );
       CHECK_CUDA( cudaStreamSynchronize( Device.Stream ) );
 
       auto start_time = std::chrono::steady_clock::now();
@@ -1513,6 +1478,28 @@ namespace cuda
          << "\n\t* Sort Time = " << sort_time << " sec."
          << "\n\t* Build Time = " << build_time << " sec."
          << "\n\t* Verify Time = " << verify_time << " sec.\n\n";
+   }
+
+   node_type* KdtreeCUDA::prepareDeviceCoordinatesPtr()
+   {
+      assert( Device.CoordinatesDevicePtr == nullptr );
+
+      CHECK_CUDA(
+         cudaMalloc(
+            reinterpret_cast<void**>(&Device.CoordinatesDevicePtr),
+            sizeof( node_type ) * Dim * (TupleNum + 1)
+         )
+      );
+
+      node_type max_value[Dim];
+      for (int i = 0; i < Dim; ++i) max_value[i] = std::numeric_limits<node_type>::max();
+      CHECK_CUDA(
+         cudaMemcpyAsync(
+            Device.CoordinatesDevicePtr + TupleNum * Dim, max_value, sizeof( node_type ) * Dim,
+            cudaMemcpyHostToDevice, Device.Stream
+         )
+      );
+      return Device.CoordinatesDevicePtr;
    }
 
    __device__
@@ -1713,7 +1700,7 @@ namespace cuda
       node_type search_radius
    ) const
    {
-      if (Device.RootNode < 0 || Coordinates == nullptr) return;
+      if (Device.RootNode < 0) return;
 
       int* lists = nullptr;
       int* list_lengths = nullptr;
