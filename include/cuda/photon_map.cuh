@@ -13,7 +13,10 @@
 
 namespace cuda
 {
+   static constexpr int SampleNum = 30;
    static constexpr int MaxDepth = 64;
+   static constexpr int GatheringDepth = 4;
+   static constexpr int NeighborNum = 64;
    static constexpr int MaxGlobalPhotonNum = 1'048'576;
 
    struct Mat
@@ -91,6 +94,11 @@ namespace cuda
    inline __host__ __device__ float3 operator*(float b, float3 a)
    {
        return make_float3( b * a.x, b * a.y, b * a.z );
+   }
+
+   inline __host__ __device__ float3 operator*(float3 a, float3 b)
+   {
+       return make_float3( a.x * b.x, a.y * b.y, a.z * b.z );
    }
 
    inline __host__ __device__ void operator*=(float3& a, float3 b)
@@ -235,6 +243,7 @@ namespace cuda
       void setLights(const std::vector<std::tuple<std::string, std::string, glm::mat4>>& lights);
       void createPhotonMap();
       void visualizePhotonMap(int width, int height);
+      void render(int width, int height);
 
    private:
       struct CUDADevice

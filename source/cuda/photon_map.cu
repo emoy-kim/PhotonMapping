@@ -342,7 +342,10 @@ namespace cuda
       const float3 incoming = -ray_direction;
       if (materials[intersection.ObjectIndex].MaterialType == MATERIAL_TYPE::LAMBERT) {
          outgoing = getSamplePointAroundAxis( pdf, intersection.ShadingNormal, state );
-         if (dot( incoming, intersection.ShadingNormal ) <= 0.0f) brdf = make_float3( 0.0f, 0.0f, 0.0f );
+         if (dot( incoming, intersection.ShadingNormal ) < 0.0f ||
+             dot( outgoing, intersection.ShadingNormal ) < 0.0f) {
+            brdf = make_float3( 0.0f, 0.0f, 0.0f );
+         }
          else brdf = materials[intersection.ObjectIndex].Diffuse * CUDART_2_OVER_PI_F * 0.5f;
       }
       else if (materials[intersection.ObjectIndex].MaterialType == MATERIAL_TYPE::MIRROR) {
@@ -458,7 +461,7 @@ namespace cuda
    }
 
    __device__
-   void cuFindNearestNeighbors(
+   void findNearestNeighbor(
       int& found_index,
       float& found_distance,
       const KdtreeNode* root,
@@ -535,7 +538,108 @@ namespace cuda
          prev = curr;
          curr = next;
       }
-      found_distance = sqrt( found_distance );
+   }
+
+   __device__
+   float push(int* index_list, float* distance_list, int node_index, float squared_distance)
+   {
+      int n = node_index;
+      float d = squared_distance;
+      for (int i = 0; i < NeighborNum; ++i) {
+         float max_distance = distance_list[i];
+         float min_distance = d;
+         int max_index = index_list[i];
+         int min_index = n;
+         if (max_distance < min_distance) {
+            max_distance = d;
+            min_distance = distance_list[i];
+            max_index = n;
+            min_index = index_list[i];
+         }
+         index_list[i] = min_index;
+         distance_list[i] = min_distance;
+         n = max_index;
+         d = max_distance;
+      }
+      return distance_list[NeighborNum - 1];
+   }
+
+   __device__
+   void findNearestNeighbors(
+      int* found_index,
+      float* found_distance,
+      const KdtreeNode* root,
+      const Photon* photons,
+      const float3& query,
+      int node_index,
+      int size
+   )
+   {
+      const int dim = 3;
+      int depth = 0;
+      int prev = -1;
+      int curr = node_index;
+      float max_squared_distance = CUDART_INF_F;
+      while (curr >= 0) {
+         const KdtreeNode* node = &root[curr];
+         const int parent = node->ParentIndex;
+         if (curr >= size) {
+            prev = curr;
+            curr = parent;
+            continue;
+         }
+
+         const bool from_child = prev >= 0 && (prev == node->LeftChildIndex || prev == node->RightChildIndex);
+         if (!from_child) {
+            const float3 v = query - photons[node->Index].Position;
+            const float squared_distance = dot( v, v );
+            if (squared_distance <= max_squared_distance) {
+               max_squared_distance = push( found_index, found_distance, curr, squared_distance );
+            }
+         }
+
+         float t;
+         const int axis = depth % dim;
+         if (axis == 0) t = query.x - photons[node->Index].Position.x;
+         else if (axis == 1) t = query.y - photons[node->Index].Position.y;
+         else t = query.z - photons[node->Index].Position.z;
+         const bool right_priority = t > 0;
+         const int far_child = right_priority ? node->LeftChildIndex : node->RightChildIndex;
+         const int close_child = right_priority ? node->RightChildIndex : node->LeftChildIndex;
+
+         int next = -1;
+         if (prev >= 0 && prev == close_child) {
+            if (far_child >= 0 && (t == 0 || t * t <= max_squared_distance)) {
+               next = far_child;
+               depth++;
+            }
+            else {
+               next = parent;
+               depth--;
+            }
+         }
+         else if (prev >= 0 && prev == far_child) {
+            next = parent;
+            depth--;
+         }
+         else if (prev < 0 || prev == parent) {
+            if (close_child < 0 && far_child < 0) {
+               next = parent;
+               depth--;
+            }
+            else if (close_child < 0) {
+               next = far_child;
+               depth++;
+            }
+            else {
+               next = close_child;
+               depth++;
+            }
+         }
+
+         prev = curr;
+         curr = next;
+      }
    }
 
    __global__
@@ -563,11 +667,11 @@ namespace cuda
       const auto y = static_cast<int>(blockIdx.y * blockDim.y + threadIdx.y);
       if (x >= width || y >= height) return;
 
+      const int k = (y * width + x) * 3;
       const auto w = static_cast<float>(width);
       const auto h = static_cast<float>(height);
       const float u = (2.0f * static_cast<float>(x) - w) / h;
       const float v = (2.0f * static_cast<float>(y) - h) / h;
-      const int k = (y * width + x) * 3;
       const float3 ray_direction = normalize( transform( *inverse_view, make_float3( u, v, -1.0f ) ) - *ray_origin );
 
       IntersectionInfo intersection;
@@ -580,9 +684,9 @@ namespace cuda
       }
 
       int index;
-      float distance;
-      cuFindNearestNeighbors( index, distance, root, photons, intersection.Position, root_node, size );
-      if (distance < 1.0f) {
+      float squared_distance;
+      findNearestNeighbor( index, squared_distance, root, photons, intersection.Position, root_node, size );
+      if (squared_distance < 0.1f) {
          float3 power = photons[index].Power;
          power.x = min( max( power.x * 255.0f, 0.0f ), 255.0f ) ;
          power.y = min( max( power.y * 255.0f, 0.0f ), 255.0f ) ;
@@ -592,6 +696,173 @@ namespace cuda
          image_buffer[k + 2] = static_cast<uint8_t>(power.z);
       }
       else image_buffer[k] = image_buffer[k + 1] = image_buffer[k + 2] = 0;
+   }
+
+   __device__
+   bool hitLight(float3& emission, const AreaLight* lights, const float3& ray_origin, const float3& ray_direction)
+   {
+      float3 tuv;
+      float3 v0 = lights[0].Vertex0;
+      float3 v1 = lights[0].Vertex1;
+      float3 v2 = lights[0].Vertex2;
+      float3 p0 = transform( lights[0].ToWorld, v0 );
+      float3 p1 = transform( lights[0].ToWorld, v1 );
+      float3 p2 = transform( lights[0].ToWorld, v2 );
+      if (intersectWithTriangle( tuv, ray_origin, ray_direction, p0, p1, p2 )) {
+         emission = lights[0].Emission;
+         return true;
+      }
+
+      v0 = lights[1].Vertex0;
+      v1 = lights[1].Vertex1;
+      v2 = lights[1].Vertex2;
+      p0 = transform( lights[1].ToWorld, v0 );
+      p1 = transform( lights[1].ToWorld, v1 );
+      p2 = transform( lights[1].ToWorld, v2 );
+      if (intersectWithTriangle( tuv, ray_origin, ray_direction, p0, p1, p2 )) {
+         emission = lights[1].Emission;
+         return true;
+      }
+      return false;
+   }
+
+   __device__
+   float3 computeRadianceWithPhotonMap(
+      const KdtreeNode* root,
+      const Photon* photons,
+      const Material* materials,
+      const IntersectionInfo& intersection,
+      const float3& ray_direction,
+      int root_node,
+      int size
+   )
+   {
+      int neighbor_indices[NeighborNum];
+      float squared_distances[NeighborNum];
+      for (int i = 0; i < NeighborNum; ++i) {
+         neighbor_indices[i] = -1;
+         squared_distances[i] = CUDART_INF_F;
+      }
+      findNearestNeighbors( neighbor_indices, squared_distances, root, photons, intersection.Position, root_node, size );
+
+      float max_distance = 0.0f;
+      float3 radiance = make_float3( 0.0f, 0.0f, 0.0f );
+      for (int i = 0; i < NeighborNum; ++i) {
+         if (neighbor_indices[i] < 0) break;
+
+         if (materials[intersection.ObjectIndex].MaterialType == MATERIAL_TYPE::LAMBERT) {
+            if (dot( -ray_direction, intersection.ShadingNormal ) > 0.0f &&
+                dot( photons[neighbor_indices[i]].IncomingDirection, intersection.ShadingNormal ) > 0.0f) {
+               radiance += photons[neighbor_indices[i]].Power *
+                  materials[intersection.ObjectIndex].Diffuse * CUDART_2_OVER_PI_F * 0.5f;
+            }
+         }
+      }
+      if (neighbor_indices[0] >= 0) radiance /= (MaxGlobalPhotonNum * CUDART_PI_F * max_distance);
+   }
+
+   __device__
+   float3 getRadiance(
+      const Photon* photons,
+      const AreaLight* lights,
+      const Material* materials,
+      const KdtreeNode* root,
+      const Box* world_bounds,
+      const Mat* to_worlds,
+      const float3& ray_origin,
+      const float3& ray_direction,
+      const float3* vertices,
+      const float3* normals,
+      const int* indices,
+      const int* vertex_sizes,
+      const int* index_sizes,
+      curandState* state,
+      int root_node,
+      int object_num,
+      int max_depth,
+      int size
+   )
+   {
+      int depth = 0;
+      while (depth < MaxDepth) {
+         IntersectionInfo intersection;
+         if (!findIntersection(
+               intersection, world_bounds, to_worlds, vertices, normals, indices, vertex_sizes, index_sizes,
+               ray_origin, ray_direction, object_num
+            )) return make_float3( 0.0f, 0.0f, 0.0f );
+
+         float3 emission;
+         if (hitLight( emission, lights, ray_origin, ray_direction )) return emission;
+
+         if (materials[intersection.ObjectIndex].MaterialType == MATERIAL_TYPE::LAMBERT) {
+            if (depth >= GatheringDepth) {
+               return computeRadianceWithPhotonMap(
+                  root, photons, materials, intersection, ray_direction, root_node, size
+               );
+            }
+         }
+         else if (materials[intersection.ObjectIndex].MaterialType == MATERIAL_TYPE::MIRROR) {
+
+         }
+         else if (materials[intersection.ObjectIndex].MaterialType == MATERIAL_TYPE::GLASS) {
+         }
+
+      }
+      return make_float3( 0.0f, 0.0f, 0.0f );
+   }
+
+   __global__
+   void cuRenderScene(
+      uint8_t* image_buffer,
+      const Photon* photons,
+      const AreaLight* lights,
+      const Material* materials,
+      const KdtreeNode* root,
+      const Box* world_bounds,
+      const Mat* to_worlds,
+      const Mat* inverse_view,
+      const float3* ray_origin,
+      const float3* vertices,
+      const float3* normals,
+      const int* indices,
+      const int* vertex_sizes,
+      const int* index_sizes,
+      int root_node,
+      int width,
+      int height,
+      int object_num,
+      int size,
+      uint seed
+   )
+   {
+      const auto x = static_cast<int>(blockIdx.x * blockDim.x + threadIdx.x);
+      const auto y = static_cast<int>(blockIdx.y * blockDim.y + threadIdx.y);
+      if (x >= width || y >= height) return;
+
+      curandState state;
+      curand_init( seed, x * 1973 + y * 9277, 0, &state );
+
+      const auto w = static_cast<float>(width);
+      const auto h = static_cast<float>(height);
+      float3 color = make_float3( 0.0f, 0.0f, 0.0f );
+      for (int i = 0; i < SampleNum; ++i) {
+         const float u = (2.0f * (static_cast<float>(x) + getRandomValue( &state, 0.0f, 1.0f )) - w) / h;
+         const float v = (2.0f * (static_cast<float>(y) + getRandomValue( &state, 0.0f, 1.0f )) - h) / h;
+         const float3 ray_direction = normalize( transform( *inverse_view, make_float3( u, v, -1.0f ) ) - *ray_origin );
+         color += getRadiance(
+            photons, lights, materials, root, world_bounds, to_worlds,
+            *ray_origin, ray_direction, vertices, normals, indices, vertex_sizes, index_sizes,
+            &state, root_node, object_num, 0, size
+         );
+      }
+
+      const int k = (y * width + x) * 3;
+      color.x = min( max( color.x * 255.0f, 0.0f ), 255.0f ) ;
+      color.y = min( max( color.y * 255.0f, 0.0f ), 255.0f ) ;
+      color.z = min( max( color.z * 255.0f, 0.0f ), 255.0f ) ;
+      image_buffer[k] = static_cast<uint8_t>(color.x);
+      image_buffer[k + 1] = static_cast<uint8_t>(color.y);
+      image_buffer[k + 2] = static_cast<uint8_t>(color.z);
    }
 
    PhotonMap::PhotonMap() : Device()
@@ -760,6 +1031,50 @@ namespace cuda
       FreeImage_Unload( image );
       delete [] image_buffer;
       std::cout << " >> Visualized Global Photon Map\n";
+   }
+
+   void PhotonMap::render(int width, int height)
+   {
+      std::cout << " >> Rendering ...\n";
+      const Mat view_matrix = getViewMatrix(
+         make_float3( 0.0f, 250.0f, 500.0f ),
+         make_float3( 0.0f, 250.0f, 0.0f ),
+         make_float3( 0.0f, 1.0f, 0.0f )
+      );
+      const Mat inverse_view = inverse( view_matrix );
+      const float3 ray_origin = make_float3( inverse_view.c3.x, inverse_view.c3.y, inverse_view.c3.z );
+      const auto object_num = static_cast<int>(Materials.size());
+
+      uint8_t* image_buffer_ptr = nullptr;
+      const size_t buffer_size = sizeof( uint8_t ) * width * height * 3;
+      CHECK_CUDA( cudaMalloc( reinterpret_cast<void**>(&image_buffer_ptr), buffer_size ) );
+
+      Mat* inverse_view_ptr = nullptr;
+      CHECK_CUDA( cudaMalloc( reinterpret_cast<void**>(&inverse_view_ptr), sizeof( Mat ) ) );
+      CHECK_CUDA( cudaMemcpy( inverse_view_ptr, &inverse_view, sizeof( Mat ), cudaMemcpyHostToDevice ) );
+
+      float3* ray_origin_ptr = nullptr;
+      CHECK_CUDA( cudaMalloc( reinterpret_cast<void**>(&ray_origin_ptr), sizeof( float3 ) ) );
+      CHECK_CUDA( cudaMemcpy( ray_origin_ptr, &ray_origin, sizeof( float3 ), cudaMemcpyHostToDevice ) );
+
+      constexpr dim3 block(32, 32);
+      const dim3 grid(divideUp( width, static_cast<int>(block.x) ), divideUp( height, static_cast<int>(block.y) ));
+
+
+      auto* image_buffer = new uint8_t[width * height * 3];
+      CHECK_CUDA( cudaMemcpy( image_buffer, image_buffer_ptr, buffer_size, cudaMemcpyDeviceToHost ) );
+      cudaFree( image_buffer_ptr );
+      cudaFree( inverse_view_ptr );
+      cudaFree( ray_origin_ptr );
+
+      FIBITMAP* image = FreeImage_ConvertFromRawBits(
+         image_buffer, width, height, width * 3, 24,
+         FI_RGBA_RED_MASK, FI_RGBA_GREEN_MASK, FI_RGBA_BLUE_MASK, false
+      );
+      FreeImage_Save( FIF_PNG, image, "../scene.png" );
+      FreeImage_Unload( image );
+      delete [] image_buffer;
+      std::cout << " >> Rendered\n";
    }
 
    void PhotonMap::findNormals(
