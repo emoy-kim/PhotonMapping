@@ -302,6 +302,15 @@ namespace cuda
    }
 
    __device__
+   float getSchlickApproximation(float cos_theta, float n1, float n2)
+   {
+      const float r0 = (n1 - n2) * (n1 - n2) / ((n1 + n2) * (n1 + n2));
+      const float x = 1.0f - cos_theta;
+      const float x2 = x * x;
+      return r0 + (1.0f - r0) * x2 * x2 * x;
+   }
+
+   __device__
    float correctShadingNormal(
       const float3& wo,
       const float3& wi,
@@ -338,14 +347,43 @@ namespace cuda
       }
       else if (materials[intersection.ObjectIndex].MaterialType == MATERIAL_TYPE::MIRROR) {
          outgoing = reflect( -incoming, intersection.ShadingNormal );
-         float d = abs( dot( outgoing, intersection.ShadingNormal ) );
+         const float d = abs( dot( outgoing, intersection.ShadingNormal ) );
          brdf = d < 1e-5f ? make_float3( 0.0f, 0.0f, 0.0f ) : make_float3( 1.0f, 1.0f, 1.0f ) / d;
       }
       else if (materials[intersection.ObjectIndex].MaterialType == MATERIAL_TYPE::GLASS) {
-         // need to update correctly ...
-         outgoing = reflect( -incoming, intersection.ShadingNormal );
-         float d = abs( dot( outgoing, intersection.ShadingNormal ) );
-         brdf = d < 1e-5f ? make_float3( 0.0f, 0.0f, 0.0f ) : make_float3( 1.0f, 1.0f, 1.0f ) / d;
+         float3 n;
+         float in_refractive_index, out_refractive_index;
+         if (dot( incoming, intersection.ShadingNormal ) > 0.0f) {
+            out_refractive_index = 1.0f;
+            in_refractive_index = materials[intersection.ObjectIndex].RefractiveIndex;
+            n = intersection.ShadingNormal;
+         }
+         else {
+            in_refractive_index = 1.0f;
+            out_refractive_index = materials[intersection.ObjectIndex].RefractiveIndex;
+            n = -intersection.ShadingNormal;
+         }
+
+         const float fresnel = getSchlickApproximation( dot( incoming, n ), out_refractive_index, in_refractive_index );
+         if (getRandomValue( state, 0.0f, 1.0f ) < fresnel) {
+            outgoing = reflect( -incoming, n );
+            const float d = abs( dot( outgoing, n ) );
+            brdf = d < 1e-5f ? make_float3( 0.0f, 0.0f, 0.0f ) : make_float3( 1.0f, 1.0f, 1.0f ) / d;
+         }
+         else {
+            outgoing = refract( -incoming, n, out_refractive_index / in_refractive_index );
+            if (outgoing.x == 0.0f && outgoing.y == 0.0f && outgoing.z == 0.0f) {
+               outgoing = reflect( -incoming, n );
+               const float d = abs( dot( outgoing, n ) );
+               brdf = d < 1e-5f ? make_float3( 0.0f, 0.0f, 0.0f ) : make_float3( 1.0f, 1.0f, 1.0f ) / d;
+            }
+            else {
+               const float d = abs( dot( outgoing, n ) );
+               brdf = d < 1e-5f ? make_float3( 0.0f, 0.0f, 0.0f ) :
+                  make_float3( 1.0f, 1.0f, 1.0f ) *
+                  (out_refractive_index * out_refractive_index) / (in_refractive_index * in_refractive_index) / d;
+            }
+         }
       }
 
       ray_origin = intersection.Position;
@@ -678,7 +716,7 @@ namespace cuda
    {
       std::cout << " >> Visualize Global Photon Map ...\n";
       const Mat view_matrix = getViewMatrix(
-         make_float3( 0.0f, 250.0f, 750.0f ),
+         make_float3( 0.0f, 250.0f, 500.0f ),
          make_float3( 0.0f, 250.0f, 0.0f ),
          make_float3( 0.0f, 1.0f, 0.0f )
       );

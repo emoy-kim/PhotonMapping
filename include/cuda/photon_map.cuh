@@ -142,6 +142,13 @@ namespace cuda
       return i - n * dot( n, i ) * 2.0f;
    }
 
+   inline __host__ __device__ float3 refract(const float3& i, const float3& n, float eta)
+   {
+      const float n_dot_i = dot( n, i );
+      const float k = 1.0f - eta * eta * (1.0f - n_dot_i * n_dot_i);
+      return k >= 0.0f ? eta * i - (eta * n_dot_i + sqrt( k )) * n : make_float3( 0.0f, 0.0f, 0.0f );
+   }
+
    inline __host__ __device__ int divideUp(int a, int b)
    {
       return (a + b - 1) / b;
