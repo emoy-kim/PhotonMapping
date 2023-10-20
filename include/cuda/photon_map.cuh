@@ -9,11 +9,12 @@
 #include "cuda/kdtree.cuh"
 #include <curand_kernel.h>
 #include <math_constants.h>
+#include <FreeImage.h>
 
 namespace cuda
 {
    static constexpr int MaxDepth = 64;
-   static constexpr int MaxGlobalPhotonNum = 10000;//1'048'576;
+   static constexpr int MaxGlobalPhotonNum = 1'048'576;
 
    struct Mat
    {
@@ -24,7 +25,11 @@ namespace cuda
          c0( make_float4( 0.0f, 0.0f, 0.0f, 0.0f ) ), c1( make_float4( 0.0f, 0.0f, 0.0f, 0.0f ) ),
          c2( make_float4( 0.0f, 0.0f, 0.0f, 0.0f ) ), c3( make_float4( 0.0f, 0.0f, 0.0f, 0.0f ) ) {}
       __host__ __device__
-      Mat(const glm::mat4& m) :
+      explicit Mat(float scalar) :
+         c0( make_float4( scalar, 0.0f, 0.0f, 0.0f ) ), c1( make_float4( 0.0f, scalar, 0.0f, 0.0f ) ),
+         c2( make_float4( 0.0f, 0.0f, scalar, 0.0f ) ), c3( make_float4( 0.0f, 0.0f, 0.0f, scalar ) ) {}
+      __host__ __device__
+      explicit Mat(const glm::mat4& m) :
          c0( make_float4( m[0][0], m[0][1], m[0][2], m[0][3] ) ),
          c1( make_float4( m[1][0], m[1][1], m[1][2], m[1][3] ) ),
          c2( make_float4( m[2][0], m[2][1], m[2][2], m[2][3] ) ),
@@ -262,6 +267,7 @@ namespace cuda
          return !n.empty() && std::find_if_not( n.begin(), n.end(), [](auto c) { return std::isdigit( c ); } ) == n.end();
       }
       void initialize();
+      [[nodiscard]] static Mat getViewMatrix(const float3& eye, const float3& center, const float3& up);
       static void findNormals(
          std::vector<float3>& normals,
          const std::vector<float3>& vertices,

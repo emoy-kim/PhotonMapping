@@ -3,58 +3,6 @@
 #ifdef USE_CUDA
 namespace cuda
 {
-#if 0
-   void visualizePhotonMap(int width, int height)
-   {
-      std::cout << " >> Visualize Global Photon Map ...\n";
-      const glm::mat4 view_matrix = glm::lookAt(
-         glm::vec3(0.0f, 250.0f, 750.0f),
-         glm::vec3(0.0f, 250.0f, 0.0f),
-         glm::vec3(0.0f, 1.0f, 0.0f)
-      );
-      const glm::mat4 inverse_view = glm::inverse( view_matrix );
-      const glm::vec3 ray_origin = inverse_view[3];
-      const auto w = static_cast<float>(width);
-      const auto h = static_cast<float>(height);
-      auto* image_buffer = new uint8_t[width * height * 3];
-      for (int j = 0; j < height; ++j) {
-         for (int i = 0; i < width; ++i) {
-            const int k = (j * width + i) * 3;
-            const float u = (2.0f * static_cast<float>(i) - w) / h;
-            const float v = (2.0f * static_cast<float>(j) - h) / h;
-            const glm::vec3 ray_direction =
-               glm::normalize( glm::vec3(inverse_view * glm::vec4(u, v, -1.0f, 1.0f)) - ray_origin );
-
-            IntersectionInfo intersection;
-            if (!findIntersection( intersection, ray_origin, ray_direction )) {
-               image_buffer[k] = image_buffer[k + 1] = image_buffer[k + 2] = 0;
-               continue;
-            }
-
-            std::vector<std::vector<std::pair<float, int>>> nn_founds;
-            GlobalPhotonTree->findNearestNeighbors( nn_founds, glm::value_ptr( intersection.Position ), 1, 1 );
-            if (nn_founds[0].front().first < 1e-3f) {
-               glm::vec3 power = GlobalPhotons[nn_founds[0].front().second].Power;
-               power = glm::clamp( power, 0.0f, 1.0f ) * 255.0f;
-               image_buffer[k] = static_cast<uint8_t>(power.x);
-               image_buffer[k + 1] = static_cast<uint8_t>(power.y);
-               image_buffer[k + 2] = static_cast<uint8_t>(power.z);
-            }
-            else image_buffer[k] = image_buffer[k + 1] = image_buffer[k + 2] = 0;
-         }
-      }
-
-      FIBITMAP* image = FreeImage_ConvertFromRawBits(
-         image_buffer, width, height, width * 3, 24,
-         FI_RGBA_RED_MASK, FI_RGBA_GREEN_MASK, FI_RGBA_BLUE_MASK, false
-      );
-      FreeImage_Save( FIF_PNG, image, "../global_photons.png" );
-      FreeImage_Unload( image );
-      delete [] image_buffer;
-      std::cout << " >> Visualized Global Photon Map\n";
-   }
-}
-#endif
    __host__ __device__
    Mat inverse(const Mat& m)
    {
@@ -204,8 +152,8 @@ namespace cuda
    float3 getSampleRayFromLight(
       float3& ray_origin,
       float3& ray_direction,
-      AreaLight* lights,
-      curandState* state
+      curandState* state,
+      const AreaLight* lights
    )
    {
       // Currently, the number of lights is 2.
@@ -305,13 +253,13 @@ namespace cuda
    __device__
    bool findIntersection(
       IntersectionInfo& intersection,
-      Box* world_bounds,
-      Mat* to_worlds,
-      float3* vertices,
-      float3* normals,
-      int* indices,
-      int* vertex_sizes,
-      int* index_sizes,
+      const Box* world_bounds,
+      const Mat* to_worlds,
+      const float3* vertices,
+      const float3* normals,
+      const int* indices,
+      const int* vertex_sizes,
+      const int* index_sizes,
       const float3& ray_origin,
       const float3& ray_direction,
       int object_num
@@ -375,8 +323,8 @@ namespace cuda
    float3 getNextSampleRay(
       float3& ray_origin,
       float3& ray_direction,
-      Material* materials,
       curandState* state,
+      const Material* materials,
       const IntersectionInfo& intersection
    )
    {
@@ -408,15 +356,15 @@ namespace cuda
    __global__
    void cuCreatePhotonMap(
       Photon* photons,
-      AreaLight* lights,
-      Material* materials,
-      Box* world_bounds,
-      Mat* to_worlds,
-      float3* vertices,
-      float3* normals,
-      int* indices,
-      int* vertex_sizes,
-      int* index_sizes,
+      const AreaLight* lights,
+      const Material* materials,
+      const Box* world_bounds,
+      const Mat* to_worlds,
+      const float3* vertices,
+      const float3* normals,
+      const int* indices,
+      const int* vertex_sizes,
+      const int* index_sizes,
       int object_num,
       uint seed
    )
@@ -430,7 +378,7 @@ namespace cuda
 
       while (true) {
          float3 ray_origin, ray_direction;
-         float3 power = getSampleRayFromLight( ray_origin, ray_direction, lights, &state );
+         float3 power = getSampleRayFromLight( ray_origin, ray_direction, &state, lights );
          for (int i = 0; i < MaxDepth; ++i) {
             if (power.x < 0.0f || power.y < 0.0f || power.z < 0.0f) break;
 
@@ -454,13 +402,13 @@ namespace cuda
                else break;
             }
 
-            power *= getNextSampleRay( ray_origin, ray_direction, materials, &state, intersection );
+            power *= getNextSampleRay( ray_origin, ray_direction, &state, materials, intersection );
          }
       }
    }
 
    __global__
-   void cuPrepareKdtree(float* coordinates, Photon* photons, int size)
+   void cuPrepareKdtree(float* coordinates, const Photon* photons, int size)
    {
       const auto index = static_cast<int>(blockIdx.x * blockDim.x + threadIdx.x);
       const auto step = static_cast<int>(blockDim.x * gridDim.x);
@@ -469,6 +417,143 @@ namespace cuda
          coordinates[3 * i + 1] = photons[i].Position.y;
          coordinates[3 * i + 2] = photons[i].Position.z;
       }
+   }
+
+   __device__
+   void cuFindNearestNeighbors(
+      int& found_index,
+      float& found_distance,
+      const KdtreeNode* root,
+      const Photon* photons,
+      const float3& query,
+      int node_index,
+      int size
+   )
+   {
+      const int dim = 3;
+      int depth = 0;
+      int prev = -1;
+      int curr = node_index;
+      found_index = -1;
+      found_distance = CUDART_INF_F;
+      while (curr >= 0) {
+         const KdtreeNode* node = &root[curr];
+         const int parent = node->ParentIndex;
+         if (curr >= size) {
+            prev = curr;
+            curr = parent;
+            continue;
+         }
+
+         const bool from_child = prev >= 0 && (prev == node->LeftChildIndex || prev == node->RightChildIndex);
+         if (!from_child) {
+            const float3 v = query - photons[node->Index].Position;
+            const float squared_distance = dot( v, v );
+            if (squared_distance <= found_distance) {
+               found_index = curr;
+               found_distance = squared_distance;
+            }
+         }
+
+         float t;
+         const int axis = depth % dim;
+         if (axis == 0) t = query.x - photons[node->Index].Position.x;
+         else if (axis == 1) t = query.y - photons[node->Index].Position.y;
+         else t = query.z - photons[node->Index].Position.z;
+         const bool right_priority = t > 0;
+         const int far_child = right_priority ? node->LeftChildIndex : node->RightChildIndex;
+         const int close_child = right_priority ? node->RightChildIndex : node->LeftChildIndex;
+
+         int next = -1;
+         if (prev >= 0 && prev == close_child) {
+            if (far_child >= 0 && (t == 0 || t * t <= found_distance)) {
+               next = far_child;
+               depth++;
+            }
+            else {
+               next = parent;
+               depth--;
+            }
+         }
+         else if (prev >= 0 && prev == far_child) {
+            next = parent;
+            depth--;
+         }
+         else if (prev < 0 || prev == parent) {
+            if (close_child < 0 && far_child < 0) {
+               next = parent;
+               depth--;
+            }
+            else if (close_child < 0) {
+               next = far_child;
+               depth++;
+            }
+            else {
+               next = close_child;
+               depth++;
+            }
+         }
+
+         prev = curr;
+         curr = next;
+      }
+      found_distance = sqrt( found_distance );
+   }
+
+   __global__
+   void cuVisualizePhotonMap(
+      uint8_t* image_buffer,
+      const Photon* photons,
+      const KdtreeNode* root,
+      const Box* world_bounds,
+      const Mat* to_worlds,
+      const Mat* inverse_view,
+      const float3* ray_origin,
+      const float3* vertices,
+      const float3* normals,
+      const int* indices,
+      const int* vertex_sizes,
+      const int* index_sizes,
+      int root_node,
+      int width,
+      int height,
+      int object_num,
+      int size
+   )
+   {
+      const auto x = static_cast<int>(blockIdx.x * blockDim.x + threadIdx.x);
+      const auto y = static_cast<int>(blockIdx.y * blockDim.y + threadIdx.y);
+      if (x >= width || y >= height) return;
+
+      const auto w = static_cast<float>(width);
+      const auto h = static_cast<float>(height);
+      const float u = (2.0f * static_cast<float>(x) - w) / h;
+      const float v = (2.0f * static_cast<float>(y) - h) / h;
+      const int k = (y * width + x) * 3;
+      const float3 ray_direction = normalize( transform( *inverse_view, make_float3( u, v, -1.0f ) ) - *ray_origin );
+
+      IntersectionInfo intersection;
+      if (!findIntersection(
+            intersection, world_bounds, to_worlds, vertices, normals, indices, vertex_sizes, index_sizes,
+            *ray_origin, ray_direction, object_num
+         )) {
+         image_buffer[k] = image_buffer[k + 1] = image_buffer[k + 2] = 0;
+         return;
+      }
+
+      int index;
+      float distance;
+      cuFindNearestNeighbors( index, distance, root, photons, intersection.Position, root_node, size );
+      if (distance < 1.0f) {
+         float3 power = photons[index].Power;
+         power.x = min( max( power.x * 255.0f, 0.0f ), 255.0f ) ;
+         power.y = min( max( power.y * 255.0f, 0.0f ), 255.0f ) ;
+         power.z = min( max( power.z * 255.0f, 0.0f ), 255.0f ) ;
+         image_buffer[k] = static_cast<uint8_t>(power.x);
+         image_buffer[k + 1] = static_cast<uint8_t>(power.y);
+         image_buffer[k + 2] = static_cast<uint8_t>(power.z);
+      }
+      else image_buffer[k] = image_buffer[k + 1] = image_buffer[k + 2] = 0;
    }
 
    PhotonMap::PhotonMap() : Device()
@@ -565,6 +650,78 @@ namespace cuda
       cuPrepareKdtree<<<block_num, thread_num>>>( coordinates, Device.GlobalPhotonsPtr, MaxGlobalPhotonNum );
       GlobalPhotonTree->create();
       std::cout << " >> Built Global Photon Map\n";
+   }
+
+   Mat PhotonMap::getViewMatrix(const float3& eye, const float3& center, const float3& up)
+   {
+      const float3 f = normalize( center - eye );
+		const float3 s = normalize( cross( f, up ) );
+		const float3 u = cross( s, f );
+
+		Mat view(1.0f);
+		view.c0.x = s.x;
+		view.c1.x = s.y;
+		view.c2.x = s.z;
+		view.c0.y = u.x;
+		view.c1.y = u.y;
+		view.c2.y = u.z;
+		view.c0.z = -f.x;
+		view.c1.z = -f.y;
+		view.c2.z = -f.z;
+		view.c3.x = -dot( s, eye );
+		view.c3.y = -dot( u, eye );
+		view.c3.z = dot( f, eye );
+		return view;
+   }
+
+   void PhotonMap::visualizePhotonMap(int width, int height)
+   {
+      std::cout << " >> Visualize Global Photon Map ...\n";
+      const Mat view_matrix = getViewMatrix(
+         make_float3( 0.0f, 250.0f, 750.0f ),
+         make_float3( 0.0f, 250.0f, 0.0f ),
+         make_float3( 0.0f, 1.0f, 0.0f )
+      );
+      const Mat inverse_view = inverse( view_matrix );
+      const float3 ray_origin = make_float3( inverse_view.c3.x, inverse_view.c3.y, inverse_view.c3.z );
+      const auto object_num = static_cast<int>(Materials.size());
+
+      uint8_t* image_buffer_ptr = nullptr;
+      const size_t buffer_size = sizeof( uint8_t ) * width * height * 3;
+      CHECK_CUDA( cudaMalloc( reinterpret_cast<void**>(&image_buffer_ptr), buffer_size ) );
+
+      Mat* inverse_view_ptr = nullptr;
+      CHECK_CUDA( cudaMalloc( reinterpret_cast<void**>(&inverse_view_ptr), sizeof( Mat ) ) );
+      CHECK_CUDA( cudaMemcpy( inverse_view_ptr, &inverse_view, sizeof( Mat ), cudaMemcpyHostToDevice ) );
+
+      float3* ray_origin_ptr = nullptr;
+      CHECK_CUDA( cudaMalloc( reinterpret_cast<void**>(&ray_origin_ptr), sizeof( float3 ) ) );
+      CHECK_CUDA( cudaMemcpy( ray_origin_ptr, &ray_origin, sizeof( float3 ), cudaMemcpyHostToDevice ) );
+
+      constexpr dim3 block(32, 32);
+      const dim3 grid(divideUp( width, static_cast<int>(block.x) ), divideUp( height, static_cast<int>(block.y) ));
+      cuVisualizePhotonMap<<<grid, block>>>(
+         image_buffer_ptr,
+         Device.GlobalPhotonsPtr, GlobalPhotonTree->getRoot(),
+         Device.WorldBoundsPtr, Device.ToWorldsPtr, inverse_view_ptr, ray_origin_ptr,
+         Device.VertexPtr, Device.NormalPtr, Device.IndexPtr, Device.VertexSizesPtr, Device.IndexSizesPtr,
+         GlobalPhotonTree->getRootNode(), width, height, object_num, MaxGlobalPhotonNum
+      );
+
+      auto* image_buffer = new uint8_t[width * height * 3];
+      CHECK_CUDA( cudaMemcpy( image_buffer, image_buffer_ptr, buffer_size, cudaMemcpyDeviceToHost ) );
+      cudaFree( image_buffer_ptr );
+      cudaFree( inverse_view_ptr );
+      cudaFree( ray_origin_ptr );
+
+      FIBITMAP* image = FreeImage_ConvertFromRawBits(
+         image_buffer, width, height, width * 3, 24,
+         FI_RGBA_RED_MASK, FI_RGBA_GREEN_MASK, FI_RGBA_BLUE_MASK, false
+      );
+      FreeImage_Save( FIF_PNG, image, "../global_photons.png" );
+      FreeImage_Unload( image );
+      delete [] image_buffer;
+      std::cout << " >> Visualized Global Photon Map\n";
    }
 
    void PhotonMap::findNormals(

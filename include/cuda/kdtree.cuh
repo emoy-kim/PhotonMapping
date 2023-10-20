@@ -64,19 +64,9 @@ namespace cuda
       ~KdtreeCUDA();
 
       [[nodiscard]] node_type* prepareDeviceCoordinatesPtr();
+      [[nodiscard]] KdtreeNode* getRoot() const { return Device.Root; }
+      [[nodiscard]] int getRootNode() const { return Device.RootNode; }
       void create();
-      void search(
-         std::vector<std::vector<int>>& founds,
-         const node_type* queries,
-         int query_num,
-         node_type search_radius
-      ) const;
-      void findNearestNeighbors(
-         std::vector<std::vector<std::pair<float, int>>>& founds,
-         const node_type* queries,
-         int query_num,
-         int neighbor_num
-      ) const;
 
    private:
       struct SortGPU
