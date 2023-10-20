@@ -762,6 +762,60 @@ namespace cuda
    }
 
    __device__
+   float3 computeDirectIllumination(
+      const IntersectionInfo& intersection,
+      const AreaLight* lights,
+      const Material* materials,
+      const Box* world_bounds,
+      const Mat* to_worlds,
+      const float3& ray_origin,
+      const float3& ray_direction,
+      const float3* vertices,
+      const float3* normals,
+      const int* indices,
+      const int* vertex_sizes,
+      const int* index_sizes,
+      curandState* state,
+      int object_num
+   )
+   {
+      // Currently, the number of lights is 2.
+      const int light_index = getRandomValue( state, 0.0f, 1.0f ) > 0.5f ? 0 : 1;
+      const float3 v0 = lights[light_index].Vertex0;
+      const float3 v1 = lights[light_index].Vertex1;
+      const float3 v2 = lights[light_index].Vertex2;
+      const float a = getRandomValue( state, 0.0f, 1.0f );
+      const float b = getRandomValue( state, 0.0f, 1.0f );
+      float3 light_position = (1.0f - a - b) * v0 + a * v1 + b * v2;
+      light_position = transform( lights[light_index].ToWorld, light_position );
+
+      const float3 normal = lights[light_index].Normal;
+      float pdf = 1.0f / (lights[light_index].Area * 2.0f);
+      const float3 incoming = normalize( light_position - intersection.Position );
+      const float l = length( light_position - intersection.Position );
+      pdf *= l * l / abs( dot( -incoming, normal ) );
+
+      float3 shadow_ray_origin = intersection.Position;
+      float3 shadow_ray_direction = incoming;
+
+      float3 radiance = make_float3( 0.0f, 0.0f, 0.0f );
+      IntersectionInfo shadow_intersection;
+      if (!findIntersection(
+            shadow_intersection, world_bounds, to_worlds, vertices, normals, indices, vertex_sizes, index_sizes,
+            ray_origin, ray_direction, object_num
+         )) {
+         if (materials[intersection.ObjectIndex].MaterialType == MATERIAL_TYPE::LAMBERT) {
+            if (dot( -ray_direction, intersection.ShadingNormal ) > 0.0f &&
+                dot( incoming, intersection.ShadingNormal ) > 0.0f) {
+               radiance = lights[light_index].Emission * abs( dot( incoming, intersection.ShadingNormal ) ) *
+                  materials[intersection.ObjectIndex].Diffuse * CUDART_2_OVER_PI_F * 0.5f / pdf;
+            }
+         }
+      }
+      return radiance;
+   }
+
+   __device__
    float3 getRadiance(
       const Photon* photons,
       const AreaLight* lights,
@@ -798,6 +852,12 @@ namespace cuda
             if (depth >= GatheringDepth) {
                return computeRadianceWithPhotonMap(
                   root, photons, materials, intersection, ray_direction, root_node, size
+               );
+            }
+            else {
+               const float3 direct = computeDirectIllumination(
+                  intersection, lights, materials, world_bounds, to_worlds, ray_origin, ray_direction,
+                  vertices, normals, indices, vertex_sizes, index_sizes, state, object_num
                );
             }
          }
