@@ -108,6 +108,13 @@ namespace cuda
        a.z *= b.z;
    }
 
+   inline __host__ __device__ void operator*=(float3& a, float b)
+   {
+       a.x *= b;
+       a.y *= b;
+       a.z *= b;
+   }
+
    inline __host__ __device__ float4 operator*(float4 a, float4 b)
    {
        return make_float4( a.x * b.x, a.y * b.y, a.z * b.z, a.w * b.w );
