@@ -1,7 +1,6 @@
 #pragma once
 
 #ifdef USE_CUDA
-#include <glm.hpp>
 #include <regex>
 #include <random>
 #include <fstream>
@@ -16,7 +15,7 @@ namespace cuda
    static constexpr int SampleNum = 30;
    static constexpr int MaxDepth = 64;
    static constexpr int GatheringDepth = 4;
-   static constexpr int NeighborNum = 64;
+   static constexpr int NeighborNum = 2;
    static constexpr int MaxGlobalPhotonNum = 1'048'576;
 
    struct Mat
@@ -31,12 +30,6 @@ namespace cuda
       explicit Mat(float scalar) :
          c0( make_float4( scalar, 0.0f, 0.0f, 0.0f ) ), c1( make_float4( 0.0f, scalar, 0.0f, 0.0f ) ),
          c2( make_float4( 0.0f, 0.0f, scalar, 0.0f ) ), c3( make_float4( 0.0f, 0.0f, 0.0f, scalar ) ) {}
-      __host__ __device__
-      explicit Mat(const glm::mat4& m) :
-         c0( make_float4( m[0][0], m[0][1], m[0][2], m[0][3] ) ),
-         c1( make_float4( m[1][0], m[1][1], m[1][2], m[1][3] ) ),
-         c2( make_float4( m[2][0], m[2][1], m[2][2], m[2][3] ) ),
-         c3( make_float4( m[3][0], m[3][1], m[3][2], m[3][3] ) ) {}
       __host__ __device__
       Mat(const float4& v0, const float4& v1, const float4& v2, const float4& v3) :
          c0( v0 ), c1( v1 ), c2( v2 ), c3( v3 ) {}
@@ -142,14 +135,14 @@ namespace cuda
       return v1.x * v2.x + v1.y * v2.y + v1.z * v2.z;
    }
 
-   inline __host__ __device__ float3 normalize(const float3& v)
-   {
-      return v / std::sqrt( dot( v, v ) );
-   }
-
    inline __host__ __device__ float length(const float3& v)
    {
-      return std::sqrt( dot( v, v ) );
+      return sqrt( dot( v, v ) );
+   }
+
+   inline __host__ __device__ float3 normalize(const float3& v)
+   {
+      return v / length( v );
    }
 
    inline __host__ __device__ float3 reflect(const float3& i, const float3& n)
@@ -208,7 +201,9 @@ namespace cuda
       float3 MinPoint;
       float3 MaxPoint;
 
+      __host__ __device__
       Box() : MinPoint(), MaxPoint() {}
+      __host__ __device__
       Box(const float3& min, const float3& max) : MinPoint( min ), MaxPoint( max ) {}
    };
 
@@ -246,8 +241,8 @@ namespace cuda
       PhotonMap();
       ~PhotonMap();
 
-      void setObjects(const std::vector<std::tuple<std::string, std::string, glm::mat4>>& objects);
-      void setLights(const std::vector<std::tuple<std::string, std::string, glm::mat4>>& lights);
+      void setObjects(const std::vector<std::tuple<std::string, std::string, cuda::Mat>>& objects);
+      void setLights(const std::vector<std::tuple<std::string, std::string, cuda::Mat>>& lights);
       void createPhotonMap();
       void visualizePhotonMap(int width, int height);
       void render(int width, int height);
@@ -274,6 +269,9 @@ namespace cuda
       };
 
       CUDADevice Device;
+      int ObjectNum;
+      Mat ViewMatrix;
+      Mat InverseViewMatrix;
       std::shared_ptr<KdtreeCUDA> GlobalPhotonTree;
       std::vector<float3> Vertices;
       std::vector<float3> Normals;
@@ -296,7 +294,7 @@ namespace cuda
          const std::vector<float3>& vertices,
          const std::vector<int>& vertex_indices
       );
-      void readObjectFile(Box& box, const std::string& file_path);
+      void readObjectFile(Box& box, const Mat& t, const std::string& file_path);
       [[nodiscard]] static Material getMaterial(const std::string& mtl_file_path);
    };
 }

@@ -3,9 +3,15 @@
 
 void testCUDA()
 {
-   const glm::mat4 cornell_box_scale = glm::scale( glm::mat4(1.0f), glm::vec3(300.0f) );
+   const glm::mat4 to_world = glm::scale( glm::mat4(1.0f), glm::vec3(300.0f) );
+   cuda::Mat cornell_box_scale;
+   cornell_box_scale.c0 = make_float4( to_world[0][0], to_world[0][1], to_world[0][2], to_world[0][3] );
+   cornell_box_scale.c1 = make_float4( to_world[1][0], to_world[1][1], to_world[1][2], to_world[1][3] );
+   cornell_box_scale.c2 = make_float4( to_world[2][0], to_world[2][1], to_world[2][2], to_world[2][3] );
+   cornell_box_scale.c3 = make_float4( to_world[3][0], to_world[3][1], to_world[3][2], to_world[3][3] );
+
    const std::string sample_directory_path = std::string(CMAKE_SOURCE_DIR) + "/samples";
-   const std::vector<std::tuple<std::string, std::string, glm::mat4>> objects = {
+   const std::vector<std::tuple<std::string, std::string, cuda::Mat>> objects = {
       std::make_tuple(
          std::string(sample_directory_path + "/CornellBox/floor.obj"),
          std::string(sample_directory_path + "/CornellBox/floor.mtl"),
@@ -48,7 +54,7 @@ void testCUDA()
       )
    };
 
-   const std::vector<std::tuple<std::string, std::string, glm::mat4>> lights = {
+   const std::vector<std::tuple<std::string, std::string, cuda::Mat>> lights = {
       std::make_tuple(
          std::string(sample_directory_path + "/CornellBox/light.obj"),
          std::string(sample_directory_path + "/CornellBox/light.mtl"),
@@ -60,7 +66,7 @@ void testCUDA()
    photon_map.setObjects( objects );
    photon_map.setLights( lights );
    photon_map.createPhotonMap();
-   photon_map.visualizePhotonMap( 1024, 1024 );
+   //photon_map.visualizePhotonMap( 1024, 1024 );
    photon_map.render( 1024, 1024 );
 }
 
