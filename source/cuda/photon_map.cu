@@ -979,21 +979,10 @@ namespace cuda
          const float u = (2.0f * (static_cast<float>(x) + getRandomValue( &state, 0.0f, 1.0f )) - w) / h;
          const float v = (2.0f * (static_cast<float>(y) + getRandomValue( &state, 0.0f, 1.0f )) - h) / h;
          const float3 ray_direction = normalize( transform( inverse_view, make_float3( u, v, -1.0f ) ) - ray_origin );
-
-         IntersectionInfo intersection;
-         if (findIntersection(
-               intersection, world_bounds, to_worlds, vertices, normals, indices, vertex_sizes, index_sizes,
-               ray_origin, ray_direction, object_num
-            )) {
-            if (materials[intersection.ObjectIndex].MaterialType == MATERIAL_TYPE::LAMBERT) {
-               color += computeRadianceWithPhotonMap( intersection, root, photons, materials, ray_direction, root_node, size );
-            }
-         }
-
-         //color += getRadiance(
-         //   photons, lights, materials, root, world_bounds, to_worlds, ray_origin, ray_direction,
-         //   vertices, normals, indices, vertex_sizes, index_sizes, &state, root_node, object_num, 0, size
-         //);
+         color += getRadiance(
+            photons, lights, materials, root, world_bounds, to_worlds, ray_origin, ray_direction,
+            vertices, normals, indices, vertex_sizes, index_sizes, &state, root_node, object_num, 0, size
+         );
       }
       color /= static_cast<float>(SampleNum);
 
