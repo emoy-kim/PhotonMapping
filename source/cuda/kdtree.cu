@@ -1478,6 +1478,7 @@ namespace cuda
          << "\n\t* Sort Time = " << sort_time << " sec."
          << "\n\t* Build Time = " << build_time << " sec."
          << "\n\t* Verify Time = " << verify_time << " sec.\n\n";
+      cudaFree( Device.CoordinatesDevicePtr );
    }
 
    node_type* KdtreeCUDA::prepareDeviceCoordinatesPtr()

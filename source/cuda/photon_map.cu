@@ -3,7 +3,7 @@
 #ifdef USE_CUDA
 namespace cuda
 {
-   __host__ __device__
+   __host__ __device__ __forceinline__
    Mat inverse(const Mat& m)
    {
       const float coef00 = m.c2.z * m.c3.w - m.c3.z * m.c2.w;
@@ -47,48 +47,44 @@ namespace cuda
       const float4 inv2 = vec0 * fac1 - vec1 * fac3 + vec3 * fac5;
       const float4 inv3 = vec0 * fac2 - vec1 * fac4 + vec2 * fac5;
 
-      const float4 sign_a = make_float4( +1.0f, -1.0f, +1.0f, -1.0f );
-      const float4 sign_b = make_float4( -1.0f, +1.0f, -1.0f, +1.0f );
+      const float4 sign_a = make_float4( 1.0f, -1.0f, 1.0f, -1.0f );
+      const float4 sign_b = make_float4( -1.0f, 1.0f, -1.0f, 1.0f );
       Mat inv(inv0 * sign_a, inv1 * sign_b, inv2 * sign_a, inv3 * sign_b);
-      const float4 row0 = make_float4( inv.c0.x, inv.c1.x, inv.c2.x, inv.c3.x );
-      const float4 dot0 = m.c0 * row0;
-      const float dot1 = (dot0.x + dot0.y) + (dot0.z + dot0.w);
-
-      const float OneOverDeterminant = 1.0f / dot1;
-      inv.c0 *= OneOverDeterminant;
-      inv.c1 *= OneOverDeterminant;
-      inv.c2 *= OneOverDeterminant;
-      inv.c3 *= OneOverDeterminant;
+      const float one_over_det = 1.0f / dot( m.c0, make_float4( inv.c0.x, inv.c1.x, inv.c2.x, inv.c3.x ) );
+      inv.c0 *= one_over_det;
+      inv.c1 *= one_over_det;
+      inv.c2 *= one_over_det;
+      inv.c3 *= one_over_det;
       return inv;
    }
 
-   __host__ __device__
+   __host__ __device__ __forceinline__
    Mat transpose(const Mat& m)
    {
-      Mat result;
-      result.c0.x = m.c0.x;
-      result.c0.y = m.c1.x;
-      result.c0.z = m.c2.x;
-      result.c0.w = m.c3.x;
+      Mat t;
+      t.c0.x = m.c0.x;
+      t.c0.y = m.c1.x;
+      t.c0.z = m.c2.x;
+      t.c0.w = m.c3.x;
 
-      result.c1.x = m.c0.y;
-      result.c1.y = m.c1.y;
-      result.c1.z = m.c2.y;
-      result.c1.w = m.c3.y;
+      t.c1.x = m.c0.y;
+      t.c1.y = m.c1.y;
+      t.c1.z = m.c2.y;
+      t.c1.w = m.c3.y;
 
-      result.c2.x = m.c0.z;
-      result.c2.y = m.c1.z;
-      result.c2.z = m.c2.z;
-      result.c2.w = m.c3.z;
+      t.c2.x = m.c0.z;
+      t.c2.y = m.c1.z;
+      t.c2.z = m.c2.z;
+      t.c2.w = m.c3.z;
 
-      result.c3.x = m.c0.w;
-      result.c3.y = m.c1.w;
-      result.c3.z = m.c2.w;
-      result.c3.w = m.c3.w;
-      return result;
+      t.c3.x = m.c0.w;
+      t.c3.y = m.c1.w;
+      t.c3.z = m.c2.w;
+      t.c3.w = m.c3.w;
+      return t;
    }
 
-   __host__ __device__
+   __host__ __device__ __forceinline__
    float3 transform(const Mat& m, const float3& v)
    {
       return make_float3(
@@ -98,13 +94,13 @@ namespace cuda
       );
    }
 
-   __host__ __device__
+   __host__ __device__ __forceinline__
    Mat getVectorTransform(const Mat& m)
    {
       return transpose( inverse( m ) );
    }
 
-   __host__ __device__
+   __host__ __device__ __forceinline__
    float3 transformVector(const Mat& m, const float3& v)
    {
       return make_float3(
@@ -114,7 +110,7 @@ namespace cuda
       );
    }
 
-   __device__
+   __device__ __forceinline__
    float getRandomValue(curandState* state, float a, float b)
    {
       float r = curand_uniform( state );
@@ -548,27 +544,27 @@ namespace cuda
    }
 
    __device__
-   float push(int index_list[], float distance_list[], int node_index, float squared_distance)
+   float push(int found_index[], float found_distance[], int node_index, float squared_distance)
    {
       int n = node_index;
       float d = squared_distance;
       for (int i = 0; i < NeighborNum; ++i) {
-         float max_distance = distance_list[i];
+         float max_distance = found_distance[i];
          float min_distance = d;
-         int max_index = index_list[i];
+         int max_index = found_index[i];
          int min_index = n;
          if (max_distance < min_distance) {
             max_distance = d;
-            min_distance = distance_list[i];
+            min_distance = found_distance[i];
             max_index = n;
-            min_index = index_list[i];
+            min_index = found_index[i];
          }
-         index_list[i] = min_index;
-         distance_list[i] = min_distance;
+         found_index[i] = min_index;
+         found_distance[i] = min_distance;
          n = max_index;
          d = max_distance;
       }
-      return distance_list[NeighborNum - 1];
+      return found_distance[NeighborNum - 1];
    }
 
    __device__
@@ -698,9 +694,9 @@ namespace cuda
          power.x = min( max( power.x * 255.0f, 0.0f ), 255.0f );
          power.y = min( max( power.y * 255.0f, 0.0f ), 255.0f );
          power.z = min( max( power.z * 255.0f, 0.0f ), 255.0f );
-         image_buffer[k] = static_cast<uint8_t>(power.x);
+         image_buffer[k + 2] = static_cast<uint8_t>(power.x);
          image_buffer[k + 1] = static_cast<uint8_t>(power.y);
-         image_buffer[k + 2] = static_cast<uint8_t>(power.z);
+         image_buffer[k] = static_cast<uint8_t>(power.z);
       }
       else image_buffer[k] = image_buffer[k + 1] = image_buffer[k + 2] = 0;
    }
@@ -744,28 +740,28 @@ namespace cuda
       int size
    )
    {
+      float3 radiance = make_float3( 0.0f, 0.0f, 0.0f );
+      if (materials[intersection.ObjectIndex].MaterialType != MATERIAL_TYPE::LAMBERT) return radiance;
+
       int indices[NeighborNum];
       float squared_distances[NeighborNum];
       for (int i = 0; i < NeighborNum; ++i) {
          indices[i] = -1;
          squared_distances[i] = CUDART_INF_F;
       }
-      findNearestNeighbors( indices, squared_distances, root, photons, intersection.Position, root_node, size );
+      findNearestNeighbor( indices[0], squared_distances[0], root, photons, intersection.Position, root_node, size );
 
       float max_distance = 0.0f;
-      float3 radiance = make_float3( 0.0f, 0.0f, 0.0f );
-      for (const auto& i : indices) {
-         if (i < 0) break;
+      for (int i = 0; i < NeighborNum; ++i) {
+         if (indices[i] < 0) break;
 
-         if (materials[intersection.ObjectIndex].MaterialType == MATERIAL_TYPE::LAMBERT) {
-            if (dot( -ray_direction, intersection.ShadingNormal ) > 0.0f &&
-                dot( photons[i].IncomingDirection, intersection.ShadingNormal ) > 0.0f) {
-               radiance += photons[i].Power * materials[intersection.ObjectIndex].Diffuse * CUDART_2_OVER_PI_F * 0.5f;
-            }
+         if (dot( photons[indices[i]].IncomingDirection, intersection.ShadingNormal ) > 0.0f) {
+            radiance +=
+               photons[indices[i]].Power * materials[intersection.ObjectIndex].Diffuse * CUDART_2_OVER_PI_F * 0.5f;
          }
-         max_distance = max( max_distance, squared_distances[i] );
+         max_distance = squared_distances[i];
       }
-      if (indices[0] >= 0) radiance /= (static_cast<float>(size) * CUDART_PI_F * max_distance);
+      if (indices[0] >= 0) radiance /= static_cast<float>(size) * CUDART_PI_F * max_distance;
       return radiance;
    }
 
@@ -1002,9 +998,9 @@ namespace cuda
       color /= static_cast<float>(SampleNum);
 
       const int k = (y * width + x) * 3;
-      image_buffer[k] = static_cast<uint8_t>(min( max( color.x * 255.0f, 0.0f ), 255.0f ));
+      image_buffer[k + 2] = static_cast<uint8_t>(min( max( color.x * 255.0f, 0.0f ), 255.0f ));
       image_buffer[k + 1] = static_cast<uint8_t>(min( max( color.y * 255.0f, 0.0f ), 255.0f ));
-      image_buffer[k + 2] = static_cast<uint8_t>(min( max( color.z * 255.0f, 0.0f ), 255.0f ));
+      image_buffer[k] = static_cast<uint8_t>(min( max( color.z * 255.0f, 0.0f ), 255.0f ));
    }
 
    PhotonMap::PhotonMap() : Device(), ObjectNum( 0 )
@@ -1033,6 +1029,8 @@ namespace cuda
 
    void PhotonMap::initialize()
    {
+      assert( Vertices.size() == Normals.size() );
+
       ObjectNum = static_cast<int>(Materials.size());
 
       int device_num = 0;
@@ -1046,7 +1044,6 @@ namespace cuda
       CHECK_CUDA( cudaMalloc( reinterpret_cast<void**>(&Device.VertexPtr), buffer_size ) );
       CHECK_CUDA( cudaMemcpy( Device.VertexPtr, Vertices.data(), buffer_size, cudaMemcpyHostToDevice ) );
 
-      buffer_size = sizeof( float3 ) * Normals.size();
       CHECK_CUDA( cudaMalloc( reinterpret_cast<void**>(&Device.NormalPtr), buffer_size ) );
       CHECK_CUDA( cudaMemcpy( Device.NormalPtr, Normals.data(), buffer_size, cudaMemcpyHostToDevice ) );
 
@@ -1101,6 +1098,7 @@ namespace cuda
          Device.VertexPtr, Device.NormalPtr, Device.IndexPtr, Device.VertexSizesPtr, Device.IndexSizesPtr,
          object_num, seed[0]
       );
+      CHECK_KERNEL;
       CHECK_CUDA( cudaDeviceSynchronize() );
       std::cout << ">> Created Photon Map\n";
 
@@ -1108,6 +1106,7 @@ namespace cuda
       GlobalPhotonTree = std::make_shared<KdtreeCUDA>( MaxGlobalPhotonNum, 3 );
       float* coordinates = GlobalPhotonTree->prepareDeviceCoordinatesPtr();
       cuPrepareKdtree<<<block_num, thread_num>>>( coordinates, Device.GlobalPhotonsPtr, MaxGlobalPhotonNum );
+      CHECK_KERNEL;
       GlobalPhotonTree->create();
       std::cout << ">> Built Global Photon Map\n";
    }
@@ -1150,6 +1149,7 @@ namespace cuda
          Device.VertexPtr, Device.NormalPtr, Device.IndexPtr, Device.VertexSizesPtr, Device.IndexSizesPtr,
          InverseViewMatrix, GlobalPhotonTree->getRootNode(), width, height, ObjectNum, MaxGlobalPhotonNum
       );
+      CHECK_KERNEL;
       CHECK_CUDA( cudaDeviceSynchronize() );
 
       auto* image_buffer = new uint8_t[width * height * 3];
@@ -1177,7 +1177,7 @@ namespace cuda
       std::seed_seq sequence{ std::chrono::system_clock::now().time_since_epoch().count() };
       sequence.generate( seed.begin(), seed.end() );
 
-      constexpr dim3 block(32, 32);
+      constexpr dim3 block(16, 16);
       const dim3 grid(divideUp( width, static_cast<int>(block.x) ), divideUp( height, static_cast<int>(block.y) ));
       cuRenderScene<<<grid, block>>>(
          image_buffer_ptr,
@@ -1186,6 +1186,7 @@ namespace cuda
          Device.VertexPtr, Device.NormalPtr, Device.IndexPtr, Device.VertexSizesPtr, Device.IndexSizesPtr,
          InverseViewMatrix, GlobalPhotonTree->getRootNode(), width, height, ObjectNum, MaxGlobalPhotonNum, seed[0]
       );
+      CHECK_KERNEL;
 
       auto* image_buffer = new uint8_t[width * height * 3];
       CHECK_CUDA( cudaMemcpy( image_buffer, image_buffer_ptr, buffer_size, cudaMemcpyDeviceToHost ) );

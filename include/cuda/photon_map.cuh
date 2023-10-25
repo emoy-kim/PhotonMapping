@@ -31,7 +31,7 @@ namespace cuda
          c0( make_float4( scalar, 0.0f, 0.0f, 0.0f ) ), c1( make_float4( 0.0f, scalar, 0.0f, 0.0f ) ),
          c2( make_float4( 0.0f, 0.0f, scalar, 0.0f ) ), c3( make_float4( 0.0f, 0.0f, 0.0f, scalar ) ) {}
       __host__ __device__
-      Mat(const float4& v0, const float4& v1, const float4& v2, const float4& v3) :
+      explicit Mat(const float4& v0, const float4& v1, const float4& v2, const float4& v3) :
          c0( v0 ), c1( v1 ), c2( v2 ), c3( v3 ) {}
    };
 
@@ -135,6 +135,11 @@ namespace cuda
       return v1.x * v2.x + v1.y * v2.y + v1.z * v2.z;
    }
 
+   inline __host__ __device__ float dot(const float4& v1, const float4& v2)
+   {
+      return v1.x * v2.x + v1.y * v2.y + v1.z * v2.z + v1.w * v2.w;
+   }
+
    inline __host__ __device__ float length(const float3& v)
    {
       return sqrt( dot( v, v ) );
@@ -232,7 +237,9 @@ namespace cuda
       float3 ShadingNormal;
 
       __host__ __device__
-      IntersectionInfo() : ObjectIndex( -1 ), Position(), Normal(), ShadingNormal() {}
+      IntersectionInfo() :
+         ObjectIndex( -1 ), Position( make_float3( 0.0f, 0.0f, 0.0f ) ), Normal( make_float3( 0.0f, 0.0f, 0.0f ) ),
+         ShadingNormal( make_float3( 0.0f, 0.0f, 0.0f ) ) {}
    };
 
    class PhotonMap final
