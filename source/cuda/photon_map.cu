@@ -741,7 +741,8 @@ namespace cuda
    )
    {
       float3 radiance = make_float3( 0.0f, 0.0f, 0.0f );
-      if (materials[intersection.ObjectIndex].MaterialType != MATERIAL_TYPE::LAMBERT) return radiance;
+      if (materials[intersection.ObjectIndex].MaterialType != MATERIAL_TYPE::LAMBERT ||
+          dot( -ray_direction, intersection.ShadingNormal )) return radiance;
 
       int indices[NeighborNum];
       float squared_distances[NeighborNum];
@@ -828,7 +829,6 @@ namespace cuda
       const Material* materials,
       const Box* world_bounds,
       const Mat* to_worlds,
-      const float3& ray_origin,
       const float3& ray_direction,
       const float3* vertices,
       const float3* normals,
@@ -842,7 +842,7 @@ namespace cuda
    )
    {
       int depth = 0;
-      float3 curr_ray_direction = ray_direction;
+      float3 curr_ray_direction = -ray_direction;
       float3 power = make_float3( 1.0f, 1.0f, 1.0f );
       float3 radiance = make_float3( 0.0f, 0.0f, 0.0f );
       IntersectionInfo curr_info = intersection;
@@ -852,6 +852,7 @@ namespace cuda
          float3 gathering_ray_origin = curr_info.Position;
          power *= getSampleBRDF( pdf, gathering_ray_direction, curr_ray_direction, state, materials, curr_info, true );
          power *= abs( dot( gathering_ray_direction, curr_info.ShadingNormal ) );
+         power /= pdf;
 
          IntersectionInfo gathering_intersection;
          if (!findIntersection(
@@ -860,7 +861,7 @@ namespace cuda
             )) break;
 
          if (materials[gathering_intersection.ObjectIndex].MaterialType == MATERIAL_TYPE::LAMBERT) {
-            radiance += power / pdf * computeRadianceWithPhotonMap(
+            radiance += power * computeRadianceWithPhotonMap(
                gathering_intersection, root, photons, materials, ray_direction, root_node, size
             );
             break;
@@ -899,6 +900,7 @@ namespace cuda
       int depth = 0;
       float3 curr_ray_origin = ray_origin;
       float3 curr_ray_direction = ray_direction;
+      float3 factor = make_float3( 1.0f, 1.0f, 1.0f );
       while (depth < MaxDepth) {
          IntersectionInfo intersection;
          if (!findIntersection(
@@ -907,11 +909,11 @@ namespace cuda
             )) return make_float3( 0.0f, 0.0f, 0.0f );
 
          float3 emission;
-         if (hitLight( emission, lights, curr_ray_origin, curr_ray_direction )) return emission;
+         if (hitLight( emission, lights, curr_ray_origin, curr_ray_direction )) return factor * emission;
 
          if (materials[intersection.ObjectIndex].MaterialType == MATERIAL_TYPE::LAMBERT) {
             if (depth >= GatheringDepth) {
-               return computeRadianceWithPhotonMap(
+               return factor * computeRadianceWithPhotonMap(
                   intersection, root, photons, materials, curr_ray_direction, root_node, size
                );
             }
@@ -923,20 +925,24 @@ namespace cuda
                //const float3 caustics = computeCausticsWithPhotonMap();
                const float3 indirect = computeIndirectIllumination(
                   intersection, root, photons, lights, materials, world_bounds, to_worlds,
-                  curr_ray_origin, curr_ray_direction, vertices, normals, indices, vertex_sizes, index_sizes,
+                  curr_ray_direction, vertices, normals, indices, vertex_sizes, index_sizes,
                   state, root_node, object_num, size
                );
-               return direct + indirect;
+               return factor * (direct + indirect);
             }
          }
          else {
             if (depth >= 3) {
-
+               float pdf;
+               float3 outgoing;
+               factor *= getSampleBRDF( pdf, outgoing, curr_ray_direction, state, materials, intersection, true );
+               factor *=
+                  correctShadingNormal( outgoing, -ray_direction, intersection.Normal, intersection.ShadingNormal ) / pdf;
+               curr_ray_origin = intersection.Position;
+               curr_ray_direction = outgoing;
             }
             depth++;
-            break;
          }
-
       }
       return make_float3( 0.0f, 0.0f, 0.0f );
    }

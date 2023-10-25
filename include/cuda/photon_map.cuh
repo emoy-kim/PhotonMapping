@@ -15,7 +15,7 @@ namespace cuda
    static constexpr int SampleNum = 30;
    static constexpr int MaxDepth = 64;
    static constexpr int GatheringDepth = 4;
-   static constexpr int NeighborNum = 2;
+   static constexpr int NeighborNum = 64;
    static constexpr int MaxGlobalPhotonNum = 1'048'576;
 
    struct Mat
