@@ -742,7 +742,7 @@ namespace cuda
    {
       float3 radiance = make_float3( 0.0f, 0.0f, 0.0f );
       if (materials[intersection.ObjectIndex].MaterialType != MATERIAL_TYPE::LAMBERT ||
-          dot( -ray_direction, intersection.ShadingNormal )) return radiance;
+          dot( -ray_direction, intersection.ShadingNormal ) <= 0.0f) return radiance;
 
       int indices[NeighborNum];
       float squared_distances[NeighborNum];
@@ -784,6 +784,10 @@ namespace cuda
       int object_num
    )
    {
+      float3 radiance = make_float3( 0.0f, 0.0f, 0.0f );
+      if (materials[intersection.ObjectIndex].MaterialType != MATERIAL_TYPE::LAMBERT ||
+          dot( -ray_direction, intersection.ShadingNormal ) <= 0.0f) return radiance;
+
       // Currently, the number of lights is 2.
       const int light_index = getRandomValue( state, 0.0f, 1.0f ) > 0.5f ? 0 : 1;
       const float3 v0 = lights[light_index].Vertex0;
@@ -794,28 +798,22 @@ namespace cuda
       float3 light_position = (1.0f - a - b) * v0 + a * v1 + b * v2;
       light_position = transform( lights[light_index].ToWorld, light_position );
 
-      const float3 normal = lights[light_index].Normal;
-      float pdf = 1.0f / (lights[light_index].Area * 2.0f);
       const float3 incoming = normalize( light_position - intersection.Position );
+      if (dot( incoming, intersection.ShadingNormal ) <= 0.0f) return radiance;
+
+      const float3 normal = lights[light_index].Normal;
       const float l = length( light_position - intersection.Position );
-      pdf *= l * l / abs( dot( -incoming, normal ) );
+      const float pdf = l * l / abs( dot( -incoming, normal ) ) / (lights[light_index].Area * 2.0f);
 
-      float3 shadow_ray_origin = intersection.Position;
-      float3 shadow_ray_direction = incoming;
-
-      float3 radiance = make_float3( 0.0f, 0.0f, 0.0f );
       IntersectionInfo shadow_intersection;
+      float3 shadow_ray_direction = incoming;
+      float3 shadow_ray_origin = intersection.Position;
       if (!findIntersection(
             shadow_intersection, world_bounds, to_worlds, vertices, normals, indices, vertex_sizes, index_sizes,
             shadow_ray_origin, shadow_ray_direction, object_num
          )) {
-         if (materials[intersection.ObjectIndex].MaterialType == MATERIAL_TYPE::LAMBERT) {
-            if (dot( -ray_direction, intersection.ShadingNormal ) > 0.0f &&
-                dot( incoming, intersection.ShadingNormal ) > 0.0f) {
-               radiance = lights[light_index].Emission * abs( dot( incoming, intersection.ShadingNormal ) ) *
-                  materials[intersection.ObjectIndex].Diffuse * CUDART_2_OVER_PI_F * 0.5f / pdf;
-            }
-         }
+         radiance = lights[light_index].Emission * abs( dot( incoming, intersection.ShadingNormal ) ) *
+            materials[intersection.ObjectIndex].Diffuse * CUDART_2_OVER_PI_F * 0.5f / pdf;
       }
       return radiance;
    }
@@ -897,11 +895,23 @@ namespace cuda
       int size
    )
    {
+      struct recursive {
+         bool active;
+         float3 curr_ray_origin;
+         float3 curr_ray_direction;
+         float3 radiance;
+      };
+
       int depth = 0;
+      recursive result[2];
+      result[0].active = true;
+      result[1].active = false;
+      result[0].curr_ray_origin = ray_origin;
+      result[0].curr_ray_direction = ray_direction;
       float3 curr_ray_origin = ray_origin;
       float3 curr_ray_direction = ray_direction;
-      float3 factor = make_float3( 1.0f, 1.0f, 1.0f );
-      while (depth < MaxDepth) {
+      float3 radiance = make_float3( 1.0f, 1.0f, 1.0f );
+      while (depth >= 0 && depth < MaxDepth) {
          IntersectionInfo intersection;
          if (!findIntersection(
                intersection, world_bounds, to_worlds, vertices, normals, indices, vertex_sizes, index_sizes,
@@ -909,11 +919,15 @@ namespace cuda
             )) return make_float3( 0.0f, 0.0f, 0.0f );
 
          float3 emission;
-         if (hitLight( emission, lights, curr_ray_origin, curr_ray_direction )) return factor * emission;
+         if (hitLight( emission, lights, curr_ray_origin, curr_ray_direction )) {
+            radiance *= emission;
+            depth--;
+            continue;
+         }
 
          if (materials[intersection.ObjectIndex].MaterialType == MATERIAL_TYPE::LAMBERT) {
             if (depth >= GatheringDepth) {
-               return factor * computeRadianceWithPhotonMap(
+               radiance *= computeRadianceWithPhotonMap(
                   intersection, root, photons, materials, curr_ray_direction, root_node, size
                );
             }
@@ -928,23 +942,59 @@ namespace cuda
                   curr_ray_direction, vertices, normals, indices, vertex_sizes, index_sizes,
                   state, root_node, object_num, size
                );
-               return factor * (direct + indirect);
+               radiance *= direct + indirect;
             }
+            depth--;
          }
          else {
             if (depth >= 3) {
                float pdf;
                float3 outgoing;
-               factor *= getSampleBRDF( pdf, outgoing, curr_ray_direction, state, materials, intersection, true );
-               factor *=
+               radiance *= getSampleBRDF( pdf, outgoing, curr_ray_direction, state, materials, intersection, true );
+               radiance *=
                   correctShadingNormal( outgoing, -ray_direction, intersection.Normal, intersection.ShadingNormal ) / pdf;
                curr_ray_origin = intersection.Position;
                curr_ray_direction = outgoing;
             }
+            else if (materials[intersection.ObjectIndex].MaterialType == MATERIAL_TYPE::MIRROR) {
+               curr_ray_origin = intersection.Position;
+               curr_ray_direction = normalize( reflect( ray_direction, intersection.ShadingNormal ) );
+            }
+            else if (materials[intersection.ObjectIndex].MaterialType == MATERIAL_TYPE::GLASS) {
+               float3 n;
+               float3 incoming = -ray_direction;
+               float in_refractive_index, out_refractive_index;
+               if (dot( incoming, intersection.ShadingNormal ) > 0.0f) {
+                  out_refractive_index = 1.0f;
+                  in_refractive_index = materials[intersection.ObjectIndex].RefractiveIndex;
+                  n = intersection.ShadingNormal;
+               }
+               else {
+                  in_refractive_index = 1.0f;
+                  out_refractive_index = materials[intersection.ObjectIndex].RefractiveIndex;
+                  n = -intersection.ShadingNormal;
+               }
+
+               const float fresnel =
+                  getSchlickApproximation( dot( incoming, n ), out_refractive_index, in_refractive_index );
+
+               float3 outgoing = refract( -incoming, n, out_refractive_index / in_refractive_index );
+               if (outgoing.x != 0.0f || outgoing.y != 0.0f || outgoing.z != 0.0f) {
+                  radiance *= fresnel;
+               }
+               else {
+                  //const float d = abs( dot( outgoing, n ) );
+                  //const float f = from_camera ?
+                  //   (out_refractive_index * out_refractive_index) / (in_refractive_index * in_refractive_index) : 1.0f;
+                  //brdf = d < 1e-5f ? make_float3( 0.0f, 0.0f, 0.0f ) : make_float3( 1.0f, 1.0f, 1.0f ) * f / d;
+               }
+               curr_ray_origin = intersection.Position;
+               curr_ray_direction = normalize( reflect( -incoming, n ) );
+            }
             depth++;
          }
       }
-      return make_float3( 0.0f, 0.0f, 0.0f );
+      return radiance;
    }
 
    __global__
