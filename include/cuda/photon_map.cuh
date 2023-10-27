@@ -17,6 +17,7 @@ namespace cuda
    static constexpr int GatheringDepth = 4;
    static constexpr int NeighborNum = 64;
    static constexpr int MaxGlobalPhotonNum = 1'048'576;
+   static constexpr float OneOverPi = CUDART_2_OVER_PI_F * 0.5f;
 
    struct Mat
    {
@@ -47,6 +48,13 @@ namespace cuda
        a.z += b.z;
    }
 
+   inline __host__ __device__ void operator+=(float3& a, float b)
+   {
+       a.x += b;
+       a.y += b;
+       a.z += b;
+   }
+
    inline __host__ __device__ float4 operator+(float4 a, float4 b)
    {
        return make_float4( a.x + b.x, a.y + b.y, a.z + b.z,  a.w + b.w );
@@ -65,6 +73,11 @@ namespace cuda
    inline __host__ __device__ float4 operator-(float4 a, float4 b)
    {
        return make_float4( a.x - b.x, a.y - b.y, a.z - b.z,  a.w - b.w );
+   }
+
+   inline __host__ __device__ float3 operator-(float b, float3 a)
+   {
+       return make_float3( b - a.x, b - a.y, b - a.z );
    }
 
    inline __host__ __device__ float3 operator/(float3 a, float b)

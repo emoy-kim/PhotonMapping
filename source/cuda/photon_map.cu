@@ -120,23 +120,22 @@ namespace cuda
 
    // this hemisphere is towards the y-axis, and its lower plane is the xz-plane.
    __device__
-   float3 getRandomPointInUnitHemisphere(float& pdf, curandState* state)
+   float3 getRandomPointInUnitHemisphere(curandState* state)
    {
       const float phi = 2.0f * CUDART_PI_F * getRandomValue( state, 0.0f, 1.0f ); // [0, 2pi]
       const float theta = acos( getRandomValue( state, -1.0f, 1.0f ) ) * 0.5f; // [0, pi/2]
       const float cos_theta = cos( theta );
-      pdf *= cos_theta * CUDART_2_OVER_PI_F * 0.5f;
       return { cos( phi ) * sin( theta ), cos_theta, sin( phi ) * sin( theta ) };
    }
 
    __device__
-   float3 getSamplePointAroundAxis(float& pdf, const float3& v, curandState* state)
+   float3 getSamplePointAroundAxis(const float3& v, curandState* state)
    {
       const float3 u = abs( v.y ) < 0.9f ?
          normalize( cross( v, make_float3( 0.0f, 1.0f, 0.0f ) ) ) :
          normalize( cross( v, make_float3( 0.0f, 0.0f, 1.0f ) ) );
       const float3 n = normalize( cross( u, v ) );
-      const float3 p = getRandomPointInUnitHemisphere( pdf, state );
+      const float3 p = getRandomPointInUnitHemisphere( state );
       return make_float3(
          u.x * p.x + v.x * p.y + n.x * p.z,
          u.y * p.x + v.y * p.y + n.y * p.z,
@@ -163,9 +162,8 @@ namespace cuda
       ray_origin = transform( lights[light_index].ToWorld, ray_origin );
 
       const float3 normal = lights[light_index].Normal;
-      float pdf = 1.0f / (lights[light_index].Area * 2.0f);
-      ray_direction = getSamplePointAroundAxis( pdf, normal, state );
-      const float3 power = lights[light_index].Emission / pdf * abs( dot( ray_direction, normal ) );
+      ray_direction = getSamplePointAroundAxis( normal, state );
+      const float3 power = lights[light_index].Emission * abs( dot( ray_direction, normal ) );
 
       const Mat n = getVectorTransform( lights[light_index].ToWorld );
       ray_direction = transformVector( n, ray_direction );
@@ -325,8 +323,7 @@ namespace cuda
    }
 
    __device__
-   float3 getSampleBRDF(
-      float& pdf,
+   float3 getSchlickBRDF(
       float3& outgoing,
       const float3& ray_direction,
       curandState* state,
@@ -335,21 +332,31 @@ namespace cuda
       bool from_camera
    )
    {
-      pdf = 1.0f;
-      float3 brdf;
+      float3 brdf = make_float3( 0.0f, 0.0f, 0.0f );
       const float3 incoming = -ray_direction;
       if (materials[intersection.ObjectIndex].MaterialType == MATERIAL_TYPE::LAMBERT) {
-         outgoing = getSamplePointAroundAxis( pdf, intersection.ShadingNormal, state );
-         if (dot( incoming, intersection.ShadingNormal ) < 0.0f ||
-             dot( outgoing, intersection.ShadingNormal ) < 0.0f) {
-            brdf = make_float3( 0.0f, 0.0f, 0.0f );
+         outgoing = getSamplePointAroundAxis( intersection.ShadingNormal, state );
+         if (dot( incoming, intersection.ShadingNormal ) >= 0.0f &&
+             dot( outgoing, intersection.ShadingNormal ) >= 0.0f) {
+            const float3 h = normalize( incoming + outgoing );
+            const float one_minus_u = 1.0f - dot( outgoing, h );
+            const float x2 = one_minus_u * one_minus_u;
+            const float3 specular_factor = materials[intersection.ObjectIndex].Specular +
+               (1.0f - materials[intersection.ObjectIndex].Specular) * x2 * x2 * one_minus_u;
+            brdf = specular_factor * materials[intersection.ObjectIndex].Diffuse * OneOverPi;
          }
-         else brdf = materials[intersection.ObjectIndex].Diffuse * CUDART_2_OVER_PI_F * 0.5f;
       }
       else if (materials[intersection.ObjectIndex].MaterialType == MATERIAL_TYPE::MIRROR) {
          outgoing = reflect( -incoming, intersection.ShadingNormal );
-         const float d = abs( dot( outgoing, intersection.ShadingNormal ) );
-         brdf = d < 1e-5f ? make_float3( 0.0f, 0.0f, 0.0f ) : make_float3( 1.0f, 1.0f, 1.0f ) / d;
+         if ((abs( abs( incoming.y ) - abs( outgoing.y ) ) < 1e-5f) &&
+             (abs( abs( incoming.x ) - abs( outgoing.x ) ) < 1e-5f)) {
+            const float3 h = normalize( incoming + outgoing );
+            const float one_minus_u = 1.0f - dot( outgoing, h );
+            const float x2 = one_minus_u * one_minus_u;
+            const float3 specular_factor = materials[intersection.ObjectIndex].Specular +
+               (1.0f - materials[intersection.ObjectIndex].Specular) * x2 * x2 * one_minus_u;
+            brdf = specular_factor * 2.0f * materials[intersection.ObjectIndex].Specular;
+         }
       }
       else if (materials[intersection.ObjectIndex].MaterialType == MATERIAL_TYPE::GLASS) {
          float3 n;
@@ -386,13 +393,13 @@ namespace cuda
             }
          }
       }
-      outgoing = normalize( outgoing );
       return brdf;
    }
 
    __global__
    void cuCreatePhotonMap(
       Photon* photons,
+      int* emitted_photon_num,
       const AreaLight* lights,
       const Material* materials,
       const Box* world_bounds,
@@ -406,7 +413,7 @@ namespace cuda
       uint seed
    )
    {
-      int generated_num = 0;
+      int generated_num = 0, emitted_num = 0;
       const auto step = static_cast<int>(blockDim.x * gridDim.x);
       const int photons_to_generate = divideUp( MaxGlobalPhotonNum, step );
       const auto index = static_cast<int>(blockIdx.x * blockDim.x + threadIdx.x) * photons_to_generate;
@@ -417,6 +424,7 @@ namespace cuda
       while (true) {
          float3 ray_origin, ray_direction;
          float3 power = getSampleRayFromLight( ray_origin, ray_direction, &state, lights );
+         emitted_num++;
          for (int i = 0; i < MaxDepth; ++i) {
             if (power.x < 0.0f || power.y < 0.0f || power.z < 0.0f) break;
 
@@ -431,7 +439,10 @@ namespace cuda
                photons[index + generated_num].Position = intersection.Position;
                photons[index + generated_num].IncomingDirection = -ray_direction;
                generated_num++;
-               if (generated_num == photons_to_generate || index + generated_num >= MaxGlobalPhotonNum) return;
+               if (generated_num == photons_to_generate || index + generated_num >= MaxGlobalPhotonNum) {
+                  atomicAdd( emitted_photon_num, emitted_num );
+                  return;
+               }
             }
 
             if (i > 0) {
@@ -440,14 +451,24 @@ namespace cuda
                else break;
             }
 
-            float pdf;
             float3 outgoing;
-            power *= getSampleBRDF( pdf, outgoing, ray_direction, &state, materials, intersection, false );
+            power *= getSchlickBRDF( outgoing, ray_direction, &state, materials, intersection, false );
             power *=
-               correctShadingNormal( outgoing, -ray_direction, intersection.Normal, intersection.ShadingNormal ) / pdf;
+               correctShadingNormal( outgoing, -ray_direction, intersection.Normal, intersection.ShadingNormal );
             ray_origin = intersection.Position;
             ray_direction = outgoing;
          }
+      }
+   }
+
+   __global__
+   void cuScalePower(Photon* photons, const int* emitted_photon_num, int size)
+   {
+      const auto index = static_cast<int>(blockIdx.x * blockDim.x + threadIdx.x);
+      const auto step = static_cast<int>(blockDim.x * gridDim.x);
+      const auto scale = 1.0f / static_cast<float>(*emitted_photon_num);
+      for (int i = index; i < size; i += step) {
+         photons[i].Power *= scale;
       }
    }
 
@@ -808,12 +829,13 @@ namespace cuda
       IntersectionInfo shadow_intersection;
       float3 shadow_ray_direction = incoming;
       float3 shadow_ray_origin = intersection.Position;
-      if (!findIntersection(
+      const int light_object_index = object_num - 2;
+      if (findIntersection(
             shadow_intersection, world_bounds, to_worlds, vertices, normals, indices, vertex_sizes, index_sizes,
             shadow_ray_origin, shadow_ray_direction, object_num
-         )) {
+         ) && shadow_intersection.ObjectIndex >= light_object_index) {
          radiance = lights[light_index].Emission * abs( dot( incoming, intersection.ShadingNormal ) ) *
-            materials[intersection.ObjectIndex].Diffuse * CUDART_2_OVER_PI_F * 0.5f / pdf;
+            materials[intersection.ObjectIndex].Diffuse;
       }
       return radiance;
    }
@@ -845,12 +867,10 @@ namespace cuda
       float3 radiance = make_float3( 0.0f, 0.0f, 0.0f );
       IntersectionInfo curr_info = intersection;
       while (depth < MaxDepth) {
-         float pdf;
          float3 gathering_ray_direction;
          float3 gathering_ray_origin = curr_info.Position;
-         power *= getSampleBRDF( pdf, gathering_ray_direction, curr_ray_direction, state, materials, curr_info, true );
+         power *= getSchlickBRDF( gathering_ray_direction, curr_ray_direction, state, materials, curr_info, true );
          power *= abs( dot( gathering_ray_direction, curr_info.ShadingNormal ) );
-         power /= pdf;
 
          IntersectionInfo gathering_intersection;
          if (!findIntersection(
@@ -891,23 +911,10 @@ namespace cuda
       curandState* state,
       int root_node,
       int object_num,
-      int max_depth,
+      int depth,
       int size
    )
    {
-      struct recursive {
-         bool active;
-         float3 curr_ray_origin;
-         float3 curr_ray_direction;
-         float3 radiance;
-      };
-
-      int depth = 0;
-      recursive result[2];
-      result[0].active = true;
-      result[1].active = false;
-      result[0].curr_ray_origin = ray_origin;
-      result[0].curr_ray_direction = ray_direction;
       float3 curr_ray_origin = ray_origin;
       float3 curr_ray_direction = ray_direction;
       float3 radiance = make_float3( 1.0f, 1.0f, 1.0f );
@@ -948,11 +955,10 @@ namespace cuda
          }
          else {
             if (depth >= 3) {
-               float pdf;
                float3 outgoing;
-               radiance *= getSampleBRDF( pdf, outgoing, curr_ray_direction, state, materials, intersection, true );
+               radiance *= getSchlickBRDF( outgoing, curr_ray_direction, state, materials, intersection, true );
                radiance *=
-                  correctShadingNormal( outgoing, -ray_direction, intersection.Normal, intersection.ShadingNormal ) / pdf;
+                  correctShadingNormal( outgoing, -ray_direction, intersection.Normal, intersection.ShadingNormal );
                curr_ray_origin = intersection.Position;
                curr_ray_direction = outgoing;
             }
@@ -981,12 +987,8 @@ namespace cuda
                float3 outgoing = refract( -incoming, n, out_refractive_index / in_refractive_index );
                if (outgoing.x != 0.0f || outgoing.y != 0.0f || outgoing.z != 0.0f) {
                   radiance *= fresnel;
-               }
-               else {
-                  //const float d = abs( dot( outgoing, n ) );
-                  //const float f = from_camera ?
-                  //   (out_refractive_index * out_refractive_index) / (in_refractive_index * in_refractive_index) : 1.0f;
-                  //brdf = d < 1e-5f ? make_float3( 0.0f, 0.0f, 0.0f ) : make_float3( 1.0f, 1.0f, 1.0f ) * f / d;
+                  radiance += (1.0f - fresnel) *
+                     (out_refractive_index * out_refractive_index) / (in_refractive_index * in_refractive_index);
                }
                curr_ray_origin = intersection.Position;
                curr_ray_direction = normalize( reflect( -incoming, n ) );
@@ -1039,6 +1041,23 @@ namespace cuda
             photons, lights, materials, root, world_bounds, to_worlds, ray_origin, ray_direction,
             vertices, normals, indices, vertex_sizes, index_sizes, &state, root_node, object_num, 0, size
          );
+
+         /*IntersectionInfo intersection;
+         if (findIntersection(
+               intersection, world_bounds, to_worlds, vertices, normals, indices, vertex_sizes, index_sizes,
+               ray_origin, ray_direction, object_num
+            )) {
+            float3 emission;
+            if (hitLight( emission, lights, ray_origin, ray_direction )) {
+               color += emission;
+            }
+            else {
+               color += computeDirectIllumination(
+                  intersection, lights, materials, world_bounds, to_worlds, ray_origin, ray_direction,
+                  vertices, normals, indices, vertex_sizes, index_sizes, &state, object_num
+               );
+            }
+         }*/
       }
       color /= static_cast<float>(SampleNum);
 
@@ -1137,14 +1156,21 @@ namespace cuda
       std::seed_seq sequence{ std::chrono::system_clock::now().time_since_epoch().count() };
       sequence.generate( seed.begin(), seed.end() );
 
+      int* emitted_photon_num = nullptr;
+      CHECK_CUDA( cudaMalloc( reinterpret_cast<void**>(&emitted_photon_num), sizeof( int ) ) );
+      CHECK_CUDA( cudaMemset( emitted_photon_num, 0, sizeof( int ) ) );
+
       cuCreatePhotonMap<<<block_num, thread_num>>>(
-         Device.GlobalPhotonsPtr,
+         Device.GlobalPhotonsPtr, emitted_photon_num,
          Device.AreaLightsPtr, Device.MaterialsPtr, Device.WorldBoundsPtr, Device.ToWorldsPtr,
          Device.VertexPtr, Device.NormalPtr, Device.IndexPtr, Device.VertexSizesPtr, Device.IndexSizesPtr,
          object_num, seed[0]
       );
       CHECK_KERNEL;
-      CHECK_CUDA( cudaDeviceSynchronize() );
+
+      cuScalePower<<<block_num, thread_num>>>( Device.GlobalPhotonsPtr, emitted_photon_num, MaxGlobalPhotonNum );
+      CHECK_KERNEL;
+      cudaFree( emitted_photon_num );
       std::cout << ">> Created Photon Map\n";
 
       std::cout << ">> Build Global Photon Map ...\n";
@@ -1418,7 +1444,10 @@ namespace cuda
             const int n0 = offset + Indices[j];
             const int n1 = offset + Indices[j + 1];
             const int n2 = offset + Indices[j + 2];
-            const float3 normal = cross( Vertices[n1] - Vertices[n0], Vertices[n2] - Vertices[n0] );
+            const float3 v0 = transform( m, Vertices[n0] );
+            const float3 v1 = transform( m, Vertices[n1] );
+            const float3 v2 = transform( m, Vertices[n2] );
+            const float3 normal = cross( v1 - v0, v2 - v0 );
             AreaLights.emplace_back(
                length( normal ) * 0.5f,
                Materials.back().Emission,
