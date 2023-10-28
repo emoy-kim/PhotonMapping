@@ -14,10 +14,11 @@ namespace cuda
 {
    static constexpr int SampleNum = 30;
    static constexpr int MaxDepth = 64;
-   static constexpr int GatheringDepth = 4;
    static constexpr int NeighborNum = 64;
    static constexpr int MaxGlobalPhotonNum = 1'048'576;
+   static constexpr int LightSampleNum = 128;
    static constexpr float OneOverPi = CUDART_2_OVER_PI_F * 0.5f;
+   static constexpr float RayEpsilon = 1e-3f;
 
    struct Mat
    {
@@ -39,6 +40,11 @@ namespace cuda
    inline __host__ __device__ float3 operator+(float3 a, float3 b)
    {
        return make_float3( a.x + b.x, a.y + b.y, a.z + b.z );
+   }
+
+   inline __host__ __device__ float3 operator+(float3 a, float b)
+   {
+       return make_float3( a.x + b, a.y + b, a.z + b );
    }
 
    inline __host__ __device__ void operator+=(float3& a, float3 b)
@@ -186,32 +192,9 @@ namespace cuda
       float3 Position;
       float3 IncomingDirection;
 
-      Photon() : Power(), Position(), IncomingDirection() {}
-   };
-
-   struct AreaLight
-   {
-      float Area;
-      float3 Emission;
-      float3 Normal;
-      float3 Vertex0;
-      float3 Vertex1;
-      float3 Vertex2;
-      Mat ToWorld;
-
-      AreaLight() :
-         Area( 0.0f ), Emission(), Normal(), Vertex0(), Vertex1(), Vertex2(), ToWorld() {}
-      AreaLight(
-         float area,
-         const float3& emission,
-         const float3& normal,
-         const float3& v0,
-         const float3& v1,
-         const float3& v2,
-         const Mat& m
-      ) :
-         Area( area ), Emission( emission ), Normal( normal ), Vertex0( v0 ), Vertex1( v1 ), Vertex2( v2 ),
-         ToWorld( m ) {}
+      Photon() :
+         Power( make_float3( 0.0f, 0.0f, 0.0f ) ), Position( make_float3( 0.0f, 0.0f, 0.0f ) ),
+         IncomingDirection( make_float3( 0.0f, 0.0f, 0.0f ) ) {}
    };
 
    struct Box
@@ -220,7 +203,7 @@ namespace cuda
       float3 MaxPoint;
 
       __host__ __device__
-      Box() : MinPoint(), MaxPoint() {}
+      Box() : MinPoint( make_float3( 0.0f, 0.0f, 0.0f ) ), MaxPoint( make_float3( 0.0f, 0.0f, 0.0f ) ) {}
       __host__ __device__
       Box(const float3& min, const float3& max) : MinPoint( min ), MaxPoint( max ) {}
    };
@@ -238,8 +221,43 @@ namespace cuda
       float3 Emission;
 
       Material() :
-         MaterialType( 0 ), SpecularExponent( 1.0f ), RefractiveIndex( 1.0f ), Ambient(), Diffuse(), Specular(),
-         Emission() {}
+         MaterialType( 0 ), SpecularExponent( 1.0f ), RefractiveIndex( 1.0f ),
+         Ambient( make_float3( 0.0f, 0.0f, 0.0f ) ), Diffuse( make_float3( 0.0f, 0.0f, 0.0f ) ),
+         Specular( make_float3( 0.0f, 0.0f, 0.0f ) ), Emission( make_float3( 0.0f, 0.0f, 0.0f ) ) {}
+
+      __device__
+      bool isDiffuse() const { return Diffuse.x > 0.0f || Diffuse.y > 0.0f || Diffuse.z > 0.0f; }
+      __device__
+      bool isSpecular() const { return Specular.x > 0.0f || Specular.y > 0.0f || Specular.z > 0.0f; }
+      __device__
+      bool refractive() const { return RefractiveIndex > 1.0f; }
+   };
+
+   struct AreaLight
+   {
+      float Area;
+      float Power;
+      float3 Color;
+      float3 Emission;
+      float3 Normal;
+      float3 Vertex0;
+      float3 Vertex1;
+      float3 Vertex2;
+      Mat ToWorld;
+
+      AreaLight(
+         float area,
+         float power,
+         const float3& color,
+         const float3& emission,
+         const float3& normal,
+         const float3& v0,
+         const float3& v1,
+         const float3& v2,
+         const Mat& m
+      ) :
+         Area( area ), Power( power ), Color( color ), Emission( emission ), Normal( normal ), Vertex0( v0 ),
+         Vertex1( v1 ), Vertex2( v2 ), ToWorld( m ) {}
    };
 
    struct IntersectionInfo
@@ -289,7 +307,9 @@ namespace cuda
       };
 
       CUDADevice Device;
+      int LightNum;
       int ObjectNum;
+      float TotalLightPower;
       Mat ViewMatrix;
       Mat InverseViewMatrix;
       std::shared_ptr<KdtreeCUDA> GlobalPhotonTree;
@@ -315,6 +335,12 @@ namespace cuda
          const std::vector<int>& vertex_indices
       );
       void readObjectFile(Box& box, const Mat& t, const std::string& file_path);
+      static void readObjectFile(
+         std::vector<float3>& vertex_buffer,
+         std::vector<float3>& normal_buffer,
+         std::vector<int>& vertex_indices,
+         const std::string& file_path
+      );
       [[nodiscard]] static Material getMaterial(const std::string& mtl_file_path);
    };
 }

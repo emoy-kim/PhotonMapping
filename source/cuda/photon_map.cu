@@ -148,11 +148,12 @@ namespace cuda
       float3& ray_origin,
       float3& ray_direction,
       curandState* state,
-      const AreaLight* lights
+      const AreaLight* lights,
+      int light_num
    )
    {
-      // Currently, the number of lights is 2.
-      const int light_index = getRandomValue( state, 0.0f, 1.0f ) > 0.5f ? 0 : 1;
+      const auto light_index =
+         static_cast<int>(round( getRandomValue( state, 0.0f, static_cast<float>(light_num - 1) ) ));
       const float3 v0 = lights[light_index].Vertex0;
       const float3 v1 = lights[light_index].Vertex1;
       const float3 v2 = lights[light_index].Vertex2;
@@ -163,11 +164,10 @@ namespace cuda
 
       const float3 normal = lights[light_index].Normal;
       ray_direction = getSamplePointAroundAxis( normal, state );
-      const float3 power = lights[light_index].Emission * abs( dot( ray_direction, normal ) );
-
       const Mat n = getVectorTransform( lights[light_index].ToWorld );
       ray_direction = transformVector( n, ray_direction );
-      return power;
+      ray_origin += RayEpsilon * ray_direction;
+      return lights[light_index].Color;
    }
 
    __device__
@@ -304,102 +304,16 @@ namespace cuda
       return r0 + (1.0f - r0) * x2 * x2 * x;
    }
 
-   __device__
-   float correctShadingNormal(
-      const float3& wo,
-      const float3& wi,
-      const float3& normal,
-      const float3& shading_normal
-   )
+   __device__ int emitted_photon_num;
+
+   __device__ __forceinline__ float max3(float3 a)
    {
-      const float wo_dot_n = dot( wo, normal );
-      const float wi_dot_n = dot( wi, normal );
-      const float wo_dot_sn = dot( wo, shading_normal );
-      const float wi_dot_sn = dot( wi, shading_normal );
-      if (wo_dot_n * wo_dot_sn <= 0.0f || wi_dot_n * wi_dot_sn <= 0.0f) return 0.0f;
-
-      const float a = abs( wo_dot_n * wi_dot_sn );
-      return a < 1e-5f ? 1.0f : abs( wo_dot_sn * wi_dot_n ) / a;
-   }
-
-   __device__
-   float3 getSchlickBRDF(
-      float3& outgoing,
-      const float3& ray_direction,
-      curandState* state,
-      const Material* materials,
-      const IntersectionInfo& intersection,
-      bool from_camera
-   )
-   {
-      float3 brdf = make_float3( 0.0f, 0.0f, 0.0f );
-      const float3 incoming = -ray_direction;
-      if (materials[intersection.ObjectIndex].MaterialType == MATERIAL_TYPE::LAMBERT) {
-         outgoing = getSamplePointAroundAxis( intersection.ShadingNormal, state );
-         if (dot( incoming, intersection.ShadingNormal ) >= 0.0f &&
-             dot( outgoing, intersection.ShadingNormal ) >= 0.0f) {
-            const float3 h = normalize( incoming + outgoing );
-            const float one_minus_u = 1.0f - dot( outgoing, h );
-            const float x2 = one_minus_u * one_minus_u;
-            const float3 specular_factor = materials[intersection.ObjectIndex].Specular +
-               (1.0f - materials[intersection.ObjectIndex].Specular) * x2 * x2 * one_minus_u;
-            brdf = specular_factor * materials[intersection.ObjectIndex].Diffuse * OneOverPi;
-         }
-      }
-      else if (materials[intersection.ObjectIndex].MaterialType == MATERIAL_TYPE::MIRROR) {
-         outgoing = reflect( -incoming, intersection.ShadingNormal );
-         if ((abs( abs( incoming.y ) - abs( outgoing.y ) ) < 1e-5f) &&
-             (abs( abs( incoming.x ) - abs( outgoing.x ) ) < 1e-5f)) {
-            const float3 h = normalize( incoming + outgoing );
-            const float one_minus_u = 1.0f - dot( outgoing, h );
-            const float x2 = one_minus_u * one_minus_u;
-            const float3 specular_factor = materials[intersection.ObjectIndex].Specular +
-               (1.0f - materials[intersection.ObjectIndex].Specular) * x2 * x2 * one_minus_u;
-            brdf = specular_factor * 2.0f * materials[intersection.ObjectIndex].Specular;
-         }
-      }
-      else if (materials[intersection.ObjectIndex].MaterialType == MATERIAL_TYPE::GLASS) {
-         float3 n;
-         float in_refractive_index, out_refractive_index;
-         if (dot( incoming, intersection.ShadingNormal ) > 0.0f) {
-            out_refractive_index = 1.0f;
-            in_refractive_index = materials[intersection.ObjectIndex].RefractiveIndex;
-            n = intersection.ShadingNormal;
-         }
-         else {
-            in_refractive_index = 1.0f;
-            out_refractive_index = materials[intersection.ObjectIndex].RefractiveIndex;
-            n = -intersection.ShadingNormal;
-         }
-
-         const float fresnel = getSchlickApproximation( dot( incoming, n ), out_refractive_index, in_refractive_index );
-         if (getRandomValue( state, 0.0f, 1.0f ) < fresnel) {
-            outgoing = reflect( -incoming, n );
-            const float d = abs( dot( outgoing, n ) );
-            brdf = d < 1e-5f ? make_float3( 0.0f, 0.0f, 0.0f ) : make_float3( 1.0f, 1.0f, 1.0f ) / d;
-         }
-         else {
-            outgoing = refract( -incoming, n, out_refractive_index / in_refractive_index );
-            if (outgoing.x == 0.0f && outgoing.y == 0.0f && outgoing.z == 0.0f) {
-               outgoing = reflect( -incoming, n );
-               const float d = abs( dot( outgoing, n ) );
-               brdf = d < 1e-5f ? make_float3( 0.0f, 0.0f, 0.0f ) : make_float3( 1.0f, 1.0f, 1.0f ) / d;
-            }
-            else {
-               const float d = abs( dot( outgoing, n ) );
-               const float f = from_camera ?
-                  (out_refractive_index * out_refractive_index) / (in_refractive_index * in_refractive_index) : 1.0f;
-               brdf = d < 1e-5f ? make_float3( 0.0f, 0.0f, 0.0f ) : make_float3( 1.0f, 1.0f, 1.0f ) * f / d;
-            }
-         }
-      }
-      return brdf;
+      return max( a.x, max( a.y, a.z ) );
    }
 
    __global__
    void cuCreatePhotonMap(
       Photon* photons,
-      int* emitted_photon_num,
       const AreaLight* lights,
       const Material* materials,
       const Box* world_bounds,
@@ -409,11 +323,12 @@ namespace cuda
       const int* indices,
       const int* vertex_sizes,
       const int* index_sizes,
+      int light_num,
       int object_num,
       uint seed
    )
    {
-      int generated_num = 0, emitted_num = 0;
+      int generated_num = 0;
       const auto step = static_cast<int>(blockDim.x * gridDim.x);
       const int photons_to_generate = divideUp( MaxGlobalPhotonNum, step );
       const auto index = static_cast<int>(blockIdx.x * blockDim.x + threadIdx.x) * photons_to_generate;
@@ -423,38 +338,48 @@ namespace cuda
 
       while (true) {
          float3 ray_origin, ray_direction;
-         float3 power = getSampleRayFromLight( ray_origin, ray_direction, &state, lights );
-         emitted_num++;
+         float3 color = getSampleRayFromLight( ray_origin, ray_direction, &state, lights, light_num );
+         atomicAdd( &emitted_photon_num, 1 );
          for (int i = 0; i < MaxDepth; ++i) {
-            if (power.x < 0.0f || power.y < 0.0f || power.z < 0.0f) break;
-
             IntersectionInfo intersection;
             if (!findIntersection(
                   intersection, world_bounds, to_worlds, vertices, normals, indices, vertex_sizes, index_sizes,
                   ray_origin, ray_direction, object_num
                )) break;
 
-            if (materials[intersection.ObjectIndex].MaterialType == MATERIAL_TYPE::LAMBERT) {
-               photons[index + generated_num].Power = power;
+            if (materials[intersection.ObjectIndex].isDiffuse()) {
+               photons[index + generated_num].Power = color;
                photons[index + generated_num].Position = intersection.Position;
                photons[index + generated_num].IncomingDirection = -ray_direction;
                generated_num++;
-               if (generated_num == photons_to_generate || index + generated_num >= MaxGlobalPhotonNum) {
-                  atomicAdd( emitted_photon_num, emitted_num );
-                  return;
-               }
+               if (generated_num == photons_to_generate || index + generated_num >= MaxGlobalPhotonNum) return;
             }
 
-            if (i > 0) {
-               const float russian_roulette = min( max( power.x, max( power.y, power.z ) ), 1.0f );
-               if (getRandomValue( &state, 0.0f, 1.0f ) < russian_roulette) power /= russian_roulette;
-               else break;
+            float specular = 0.0f;
+            if (materials[intersection.ObjectIndex].refractive()) {
+               specular = getSchlickApproximation(
+                  dot( -ray_direction, intersection.ShadingNormal ),
+                  1.0f, materials[intersection.ObjectIndex].RefractiveIndex
+               );
             }
+            const float m = max3( color );
+            const float diffuse_probability = max3( materials[intersection.ObjectIndex].Diffuse * color ) / m;
+            const float specular_probability = max3( materials[intersection.ObjectIndex].Specular * color ) / m + specular;
+            const float probability_sum = diffuse_probability + specular_probability;
+            float r = getRandomValue( &state, 0.0f, 1.0f );
+            if (probability_sum > 1.0f) r *= probability_sum;
 
             float3 outgoing;
-            power *= getSchlickBRDF( outgoing, ray_direction, &state, materials, intersection, false );
-            power *=
-               correctShadingNormal( outgoing, -ray_direction, intersection.Normal, intersection.ShadingNormal );
+            if (r < diffuse_probability) {
+               outgoing = getSamplePointAroundAxis( intersection.ShadingNormal, &state );
+               color *= materials[intersection.ObjectIndex].Diffuse / diffuse_probability;
+            }
+            else if (r < diffuse_probability + specular_probability) {
+               outgoing = reflect( ray_direction, intersection.ShadingNormal );
+               color *= (materials[intersection.ObjectIndex].Specular + specular) / specular_probability;
+            }
+            else break;
+
             ray_origin = intersection.Position;
             ray_direction = outgoing;
          }
@@ -462,11 +387,11 @@ namespace cuda
    }
 
    __global__
-   void cuScalePower(Photon* photons, const int* emitted_photon_num, int size)
+   void cuScalePower(Photon* photons, float total_light_power, int size)
    {
       const auto index = static_cast<int>(blockIdx.x * blockDim.x + threadIdx.x);
       const auto step = static_cast<int>(blockDim.x * gridDim.x);
-      const auto scale = 1.0f / static_cast<float>(*emitted_photon_num);
+      const auto scale = total_light_power / static_cast<float>(emitted_photon_num);
       for (int i = index; i < size; i += step) {
          photons[i].Power *= scale;
       }
@@ -723,29 +648,26 @@ namespace cuda
    }
 
    __device__
-   bool hitLight(float3& emission, const AreaLight* lights, const float3& ray_origin, const float3& ray_direction)
+   bool hitLight(
+      float3& emission,
+      const float3& ray_origin,
+      const float3& ray_direction,
+      const AreaLight* lights,
+      int light_num
+   )
    {
-      float3 tuv;
-      float3 v0 = lights[0].Vertex0;
-      float3 v1 = lights[0].Vertex1;
-      float3 v2 = lights[0].Vertex2;
-      float3 p0 = transform( lights[0].ToWorld, v0 );
-      float3 p1 = transform( lights[0].ToWorld, v1 );
-      float3 p2 = transform( lights[0].ToWorld, v2 );
-      if (intersectWithTriangle( tuv, ray_origin, ray_direction, p0, p1, p2 )) {
-         emission = lights[0].Emission;
-         return true;
-      }
-
-      v0 = lights[1].Vertex0;
-      v1 = lights[1].Vertex1;
-      v2 = lights[1].Vertex2;
-      p0 = transform( lights[1].ToWorld, v0 );
-      p1 = transform( lights[1].ToWorld, v1 );
-      p2 = transform( lights[1].ToWorld, v2 );
-      if (intersectWithTriangle( tuv, ray_origin, ray_direction, p0, p1, p2 )) {
-         emission = lights[1].Emission;
-         return true;
+      for (int i = 0; i < light_num; ++i) {
+         float3 tuv;
+         const float3 v0 = lights[i].Vertex0;
+         const float3 v1 = lights[i].Vertex1;
+         const float3 v2 = lights[i].Vertex2;
+         const float3 p0 = transform( lights[i].ToWorld, v0 );
+         const float3 p1 = transform( lights[i].ToWorld, v1 );
+         const float3 p2 = transform( lights[i].ToWorld, v2 );
+         if (intersectWithTriangle( tuv, ray_origin, ray_direction, p0, p1, p2 )) {
+            emission = lights[i].Emission;
+            return true;
+         }
       }
       return false;
    }
@@ -762,8 +684,7 @@ namespace cuda
    )
    {
       float3 radiance = make_float3( 0.0f, 0.0f, 0.0f );
-      if (materials[intersection.ObjectIndex].MaterialType != MATERIAL_TYPE::LAMBERT ||
-          dot( -ray_direction, intersection.ShadingNormal ) <= 0.0f) return radiance;
+      if (dot( -ray_direction, intersection.ShadingNormal ) <= 0.0f) return radiance;
 
       int indices[NeighborNum];
       float squared_distances[NeighborNum];
@@ -771,19 +692,21 @@ namespace cuda
          indices[i] = -1;
          squared_distances[i] = CUDART_INF_F;
       }
-      findNearestNeighbor( indices[0], squared_distances[0], root, photons, intersection.Position, root_node, size );
+      findNearestNeighbors( indices, squared_distances, root, photons, intersection.Position, root_node, size );
 
       float max_distance = 0.0f;
+      const Material& m = materials[intersection.ObjectIndex];
       for (int i = 0; i < NeighborNum; ++i) {
          if (indices[i] < 0) break;
 
-         if (dot( photons[indices[i]].IncomingDirection, intersection.ShadingNormal ) > 0.0f) {
-            radiance +=
-               photons[indices[i]].Power * materials[intersection.ObjectIndex].Diffuse * CUDART_2_OVER_PI_F * 0.5f;
-         }
+         const float n = dot( photons[indices[i]].IncomingDirection, intersection.ShadingNormal );
+         if (n <= 0.0f) continue;
+
+         const float d = max( dot( -ray_direction, photons[indices[i]].IncomingDirection ), 0.0f );
+         radiance += photons[indices[i]].Power * (n * m.Diffuse + pow( d, m.SpecularExponent ) * m.Specular);
          max_distance = squared_distances[i];
       }
-      if (indices[0] >= 0) radiance /= static_cast<float>(size) * CUDART_PI_F * max_distance;
+      if (indices[0] >= 0) radiance /= CUDART_PI_F * max_distance;
       return radiance;
    }
 
@@ -802,46 +725,128 @@ namespace cuda
       const int* vertex_sizes,
       const int* index_sizes,
       curandState* state,
-      int object_num
+      int light_num,
+      int object_num,
+      int sample_num
    )
    {
       float3 radiance = make_float3( 0.0f, 0.0f, 0.0f );
-      if (materials[intersection.ObjectIndex].MaterialType != MATERIAL_TYPE::LAMBERT ||
-          dot( -ray_direction, intersection.ShadingNormal ) <= 0.0f) return radiance;
+      if (dot( -ray_direction, intersection.ShadingNormal ) <= 0.0f) return radiance;
 
-      // Currently, the number of lights is 2.
-      const int light_index = getRandomValue( state, 0.0f, 1.0f ) > 0.5f ? 0 : 1;
-      const float3 v0 = lights[light_index].Vertex0;
-      const float3 v1 = lights[light_index].Vertex1;
-      const float3 v2 = lights[light_index].Vertex2;
-      const float a = getRandomValue( state, 0.0f, 1.0f );
-      const float b = getRandomValue( state, 0.0f, 1.0f );
-      float3 light_position = (1.0f - a - b) * v0 + a * v1 + b * v2;
-      light_position = transform( lights[light_index].ToWorld, light_position );
+      const Material& m = materials[intersection.ObjectIndex];
+      for (int i = 0; i < light_num; ++i) {
+         const float3 v0 = lights[i].Vertex0;
+         const float3 v1 = lights[i].Vertex1;
+         const float3 v2 = lights[i].Vertex2;
+         const float a = getRandomValue( state, 0.0f, 1.0f );
+         const float b = getRandomValue( state, 0.0f, 1.0f );
+         float3 light_position = (1.0f - a - b) * v0 + a * v1 + b * v2;
+         light_position = transform( lights[i].ToWorld, light_position );
 
-      const float3 incoming = normalize( light_position - intersection.Position );
-      if (dot( incoming, intersection.ShadingNormal ) <= 0.0f) return radiance;
+         const float3 normal = lights[i].Normal;
+         float3 light_direction = getSamplePointAroundAxis( normal, state );
+         const Mat n = getVectorTransform( lights[i].ToWorld );
+         light_direction = transformVector( n, light_direction );
+         light_position += RayEpsilon * light_direction;
 
-      const float3 normal = lights[light_index].Normal;
-      const float l = length( light_position - intersection.Position );
-      const float pdf = l * l / abs( dot( -incoming, normal ) ) / (lights[light_index].Area * 2.0f);
+         const float3 l = normalize( light_position - intersection.Position );
+         const float d = dot( l, intersection.ShadingNormal );
+         if (d <= 0.0f) continue;
 
-      IntersectionInfo shadow_intersection;
-      float3 shadow_ray_direction = incoming;
-      float3 shadow_ray_origin = intersection.Position;
-      const int light_object_index = object_num - 2;
-      if (findIntersection(
+         IntersectionInfo shadow_intersection;
+         float3 shadow_ray_direction = l;
+         float3 shadow_ray_origin = intersection.Position;
+         if (!findIntersection(
             shadow_intersection, world_bounds, to_worlds, vertices, normals, indices, vertex_sizes, index_sizes,
             shadow_ray_origin, shadow_ray_direction, object_num
-         ) && shadow_intersection.ObjectIndex >= light_object_index) {
-         radiance = lights[light_index].Emission * abs( dot( incoming, intersection.ShadingNormal ) ) *
-            materials[intersection.ObjectIndex].Diffuse;
+         )) {
+            float3 diffuse = make_float3( 0.0f, 0.0f, 0.0f );
+            float3 specular = make_float3( 0.0f, 0.0f, 0.0f );
+            for (int j = 0; j < sample_num; ++j) {
+               const float3 c = lights[i].Color * dot( light_direction, -l ) * 2.0f * d;
+               const float s = dot( -ray_direction, reflect( -l, intersection.ShadingNormal ) );
+               diffuse += c * m.Diffuse;
+               if (s > 0.0f) specular += c * m.Specular * pow( s, m.SpecularExponent );
+            }
+            radiance += (diffuse + specular) * lights[i].Area / static_cast<float>(sample_num);
+         }
       }
-      return radiance;
+      return radiance + m.Emission;
    }
 
    __device__
    float3 computeIndirectIllumination(
+      const IntersectionInfo& intersection,
+      const KdtreeNode* root,
+      const Photon* photons,
+      const AreaLight* lights,
+      const Material* materials,
+      const Box* world_bounds,
+      const Mat* to_worlds,
+      const float3* vertices,
+      const float3* normals,
+      const int* indices,
+      const int* vertex_sizes,
+      const int* index_sizes,
+      curandState* state,
+      int root_node,
+      int light_num,
+      int object_num,
+      int size
+   )
+   {
+      float3 origin = intersection.Position;
+      float3 direction = getSamplePointAroundAxis( intersection.ShadingNormal, state );
+      float3 weight = make_float3( 1.0f, 1.0f, 1.0f );
+      float3 radiance = make_float3( 0.0f, 0.0f, 0.0f );
+      for (int i = 0; i < MaxDepth; ++i) {
+         float3 color = make_float3( 0.0f, 0.0f, 0.0f );
+         float3 light_emission = make_float3( 0.0f, 0.0f, 0.0f );
+         const bool hit_light = hitLight( light_emission, origin, direction, lights, light_num );
+
+         IntersectionInfo next_intersection;
+         if (!findIntersection(
+            next_intersection, world_bounds, to_worlds, vertices, normals, indices, vertex_sizes, index_sizes,
+            origin, direction, object_num
+         )) {
+            radiance += light_emission;
+            break;
+         }
+
+         float specular = 0.0f;
+         const Material& m = materials[next_intersection.ObjectIndex];
+         if (m.refractive()) {
+            specular =
+               getSchlickApproximation( dot( -direction, next_intersection.ShadingNormal ), 1.0f, m.RefractiveIndex );
+         }
+
+         const float diffuse_probability = max3( m.Diffuse );
+         const float specular_probability = max3( m.Specular ) + specular;
+         const float probability_sum = diffuse_probability + specular_probability;
+         float r = getRandomValue( state, 0.0f, 1.0f );
+         if (probability_sum > 1.0f) r *= probability_sum;
+
+         if (r < diffuse_probability) {
+            const float3 diffuse = computeRadianceWithPhotonMap(
+               next_intersection, root, photons, materials, reflect( direction, next_intersection.ShadingNormal ),
+               root_node, size
+            );
+            radiance += diffuse * m.Diffuse * weight / diffuse_probability;
+            break;
+         }
+         else if (r < diffuse_probability + specular_probability) {
+            weight *= (m.Specular + specular) / specular_probability;
+            direction = reflect( direction, next_intersection.ShadingNormal );
+         }
+         else break;
+
+         origin = next_intersection.Position + RayEpsilon * direction;
+      }
+      return materials[intersection.ObjectIndex].Diffuse * radiance;
+   }
+
+   __device__
+   float3 computeSpecularIllumination(
       const IntersectionInfo& intersection,
       const KdtreeNode* root,
       const Photon* photons,
@@ -856,45 +861,74 @@ namespace cuda
       const int* vertex_sizes,
       const int* index_sizes,
       curandState* state,
+      float specular,
       int root_node,
+      int light_num,
       int object_num,
       int size
    )
    {
-      int depth = 0;
-      float3 curr_ray_direction = -ray_direction;
-      float3 power = make_float3( 1.0f, 1.0f, 1.0f );
+      float3 origin = intersection.Position;
+      float3 direction = reflect( ray_direction, intersection.ShadingNormal );
+      float3 weight = make_float3( 1.0f, 1.0f, 1.0f );
       float3 radiance = make_float3( 0.0f, 0.0f, 0.0f );
-      IntersectionInfo curr_info = intersection;
-      while (depth < MaxDepth) {
-         float3 gathering_ray_direction;
-         float3 gathering_ray_origin = curr_info.Position;
-         power *= getSchlickBRDF( gathering_ray_direction, curr_ray_direction, state, materials, curr_info, true );
-         power *= abs( dot( gathering_ray_direction, curr_info.ShadingNormal ) );
+      for (int i = 0; i < MaxDepth; ++i) {
+         float3 color = make_float3( 0.0f, 0.0f, 0.0f );
+         float3 light_emission = make_float3( 0.0f, 0.0f, 0.0f );
+         const bool hit_light = hitLight( light_emission, origin, direction, lights, light_num );
 
-         IntersectionInfo gathering_intersection;
+         IntersectionInfo next_intersection;
          if (!findIntersection(
-               gathering_intersection, world_bounds, to_worlds, vertices, normals, indices, vertex_sizes, index_sizes,
-               gathering_ray_origin, gathering_ray_direction, object_num
-            )) break;
-
-         if (materials[gathering_intersection.ObjectIndex].MaterialType == MATERIAL_TYPE::LAMBERT) {
-            radiance += power * computeRadianceWithPhotonMap(
-               gathering_intersection, root, photons, materials, ray_direction, root_node, size
-            );
+            next_intersection, world_bounds, to_worlds, vertices, normals, indices, vertex_sizes, index_sizes,
+            origin, direction, object_num
+         )) {
+            radiance += light_emission;
             break;
          }
-         else {
-            curr_ray_direction = -gathering_ray_direction;
-            curr_info = gathering_intersection;
-            depth++;
+
+         const Material& m = materials[next_intersection.ObjectIndex];
+         if (m.isDiffuse() || m.isSpecular()) {
+            color += light_emission + computeDirectIllumination(
+               next_intersection, lights, materials, world_bounds, to_worlds, origin, direction,
+               vertices, normals, indices, vertex_sizes, index_sizes, state, light_num, object_num, 2
+            );
          }
+         //if (m.isDiffuse()) color += computeCausticsWithPhotonMap();
+         radiance += color * weight;
+
+         float sub_specular = 0.0f;
+         if (m.refractive()) {
+            sub_specular =
+               getSchlickApproximation( dot( -direction, next_intersection.ShadingNormal ), 1.0f, m.RefractiveIndex );
+         }
+
+         const float diffuse_probability = max3( m.Diffuse );
+         const float specular_probability = max3( m.Specular ) + specular;
+         const float probability_sum = diffuse_probability + specular_probability;
+         float r = getRandomValue( state, 0.0f, 1.0f );
+         if (probability_sum > 1.0f) r *= probability_sum;
+
+         if (r < diffuse_probability) {
+            const float3 indirect = computeIndirectIllumination(
+               next_intersection, root, photons, lights, materials, world_bounds, to_worlds,
+               vertices, normals, indices, vertex_sizes, index_sizes, state, root_node, light_num, object_num, size
+            );
+            radiance += indirect * m.Diffuse * weight / diffuse_probability;
+            break;
+         }
+         else if (r < diffuse_probability + specular_probability) {
+            weight *= (m.Specular + specular) / specular_probability;
+            direction = reflect( direction, next_intersection.ShadingNormal );
+         }
+         else break;
+
+         origin = next_intersection.Position + RayEpsilon * direction;
       }
-      return radiance;
+      return (materials[intersection.ObjectIndex].Specular + specular) * radiance;
    }
 
    __device__
-   float3 getRadiance(
+   float3 estimateRadiance(
       const Photon* photons,
       const AreaLight* lights,
       const Material* materials,
@@ -910,91 +944,49 @@ namespace cuda
       const int* index_sizes,
       curandState* state,
       int root_node,
+      int light_num,
       int object_num,
-      int depth,
       int size
    )
    {
-      float3 curr_ray_origin = ray_origin;
-      float3 curr_ray_direction = ray_direction;
-      float3 radiance = make_float3( 1.0f, 1.0f, 1.0f );
-      while (depth >= 0 && depth < MaxDepth) {
-         IntersectionInfo intersection;
-         if (!findIntersection(
-               intersection, world_bounds, to_worlds, vertices, normals, indices, vertex_sizes, index_sizes,
-               curr_ray_origin, curr_ray_direction, object_num
-            )) return make_float3( 0.0f, 0.0f, 0.0f );
+      float3 light_emission = make_float3( 0.0f, 0.0f, 0.0f );
+      const bool hit_light = hitLight( light_emission, ray_origin, ray_direction, lights, light_num );
 
-         float3 emission;
-         if (hitLight( emission, lights, curr_ray_origin, curr_ray_direction )) {
-            radiance *= emission;
-            depth--;
-            continue;
-         }
+      IntersectionInfo intersection;
+      float3 radiance = make_float3( 0.0f, 0.0f, 0.0f );
+      if (!findIntersection(
+         intersection, world_bounds, to_worlds, vertices, normals, indices, vertex_sizes, index_sizes,
+         ray_origin, ray_direction, object_num
+      )) return light_emission;
 
-         if (materials[intersection.ObjectIndex].MaterialType == MATERIAL_TYPE::LAMBERT) {
-            if (depth >= GatheringDepth) {
-               radiance *= computeRadianceWithPhotonMap(
-                  intersection, root, photons, materials, curr_ray_direction, root_node, size
-               );
-            }
-            else {
-               const float3 direct = computeDirectIllumination(
-                  intersection, lights, materials, world_bounds, to_worlds, curr_ray_origin, curr_ray_direction,
-                  vertices, normals, indices, vertex_sizes, index_sizes, state, object_num
-               );
-               //const float3 caustics = computeCausticsWithPhotonMap();
-               const float3 indirect = computeIndirectIllumination(
-                  intersection, root, photons, lights, materials, world_bounds, to_worlds,
-                  curr_ray_direction, vertices, normals, indices, vertex_sizes, index_sizes,
-                  state, root_node, object_num, size
-               );
-               radiance *= direct + indirect;
-            }
-            depth--;
-         }
-         else {
-            if (depth >= 3) {
-               float3 outgoing;
-               radiance *= getSchlickBRDF( outgoing, curr_ray_direction, state, materials, intersection, true );
-               radiance *=
-                  correctShadingNormal( outgoing, -ray_direction, intersection.Normal, intersection.ShadingNormal );
-               curr_ray_origin = intersection.Position;
-               curr_ray_direction = outgoing;
-            }
-            else if (materials[intersection.ObjectIndex].MaterialType == MATERIAL_TYPE::MIRROR) {
-               curr_ray_origin = intersection.Position;
-               curr_ray_direction = normalize( reflect( ray_direction, intersection.ShadingNormal ) );
-            }
-            else if (materials[intersection.ObjectIndex].MaterialType == MATERIAL_TYPE::GLASS) {
-               float3 n;
-               float3 incoming = -ray_direction;
-               float in_refractive_index, out_refractive_index;
-               if (dot( incoming, intersection.ShadingNormal ) > 0.0f) {
-                  out_refractive_index = 1.0f;
-                  in_refractive_index = materials[intersection.ObjectIndex].RefractiveIndex;
-                  n = intersection.ShadingNormal;
-               }
-               else {
-                  in_refractive_index = 1.0f;
-                  out_refractive_index = materials[intersection.ObjectIndex].RefractiveIndex;
-                  n = -intersection.ShadingNormal;
-               }
+      const Material& m = materials[intersection.ObjectIndex];
+      radiance += m.Ambient;
+      if (m.isDiffuse() || m.isSpecular()) {
+         radiance += light_emission + computeDirectIllumination(
+            intersection, lights, materials, world_bounds, to_worlds, ray_origin, ray_direction,
+            vertices, normals, indices, vertex_sizes, index_sizes, state, light_num, object_num, LightSampleNum
+         );
+      }
 
-               const float fresnel =
-                  getSchlickApproximation( dot( incoming, n ), out_refractive_index, in_refractive_index );
-
-               float3 outgoing = refract( -incoming, n, out_refractive_index / in_refractive_index );
-               if (outgoing.x != 0.0f || outgoing.y != 0.0f || outgoing.z != 0.0f) {
-                  radiance *= fresnel;
-                  radiance += (1.0f - fresnel) *
-                     (out_refractive_index * out_refractive_index) / (in_refractive_index * in_refractive_index);
-               }
-               curr_ray_origin = intersection.Position;
-               curr_ray_direction = normalize( reflect( -incoming, n ) );
-            }
-            depth++;
-         }
+      float specular = 0.0f;
+      if (m.refractive()) {
+         specular =
+            getSchlickApproximation( dot( -ray_direction, intersection.ShadingNormal ), 1.0f, m.RefractiveIndex );
+      }
+      if (m.isSpecular() || specular > 0.0f) {
+         radiance += computeSpecularIllumination(
+            intersection, root, photons, lights, materials, world_bounds, to_worlds, ray_direction,
+            vertices, normals, indices, vertex_sizes, index_sizes, state,
+            specular, root_node, light_num, object_num, size
+         );
+      }
+      if (m.isDiffuse()) {
+         radiance += computeIndirectIllumination(
+            intersection, root, photons, lights, materials, world_bounds, to_worlds,
+            vertices, normals, indices, vertex_sizes, index_sizes, state, root_node, light_num, object_num, size
+         );
+         //radiance += computeCausticsWithPhotonMap();
+         //radiance += computeRadianceWithPhotonMap();
       }
       return radiance;
    }
@@ -1017,6 +1009,7 @@ namespace cuda
       int root_node,
       int width,
       int height,
+      int light_num,
       int object_num,
       int size,
       uint seed
@@ -1037,27 +1030,10 @@ namespace cuda
          const float u = (2.0f * (static_cast<float>(x) + getRandomValue( &state, 0.0f, 1.0f )) - w) / h;
          const float v = (2.0f * (static_cast<float>(y) + getRandomValue( &state, 0.0f, 1.0f )) - h) / h;
          const float3 ray_direction = normalize( transform( inverse_view, make_float3( u, v, -1.0f ) ) - ray_origin );
-         color += getRadiance(
+         color += estimateRadiance(
             photons, lights, materials, root, world_bounds, to_worlds, ray_origin, ray_direction,
-            vertices, normals, indices, vertex_sizes, index_sizes, &state, root_node, object_num, 0, size
+            vertices, normals, indices, vertex_sizes, index_sizes, &state, root_node, light_num, object_num, size
          );
-
-         /*IntersectionInfo intersection;
-         if (findIntersection(
-               intersection, world_bounds, to_worlds, vertices, normals, indices, vertex_sizes, index_sizes,
-               ray_origin, ray_direction, object_num
-            )) {
-            float3 emission;
-            if (hitLight( emission, lights, ray_origin, ray_direction )) {
-               color += emission;
-            }
-            else {
-               color += computeDirectIllumination(
-                  intersection, lights, materials, world_bounds, to_worlds, ray_origin, ray_direction,
-                  vertices, normals, indices, vertex_sizes, index_sizes, &state, object_num
-               );
-            }
-         }*/
       }
       color /= static_cast<float>(SampleNum);
 
@@ -1067,7 +1043,7 @@ namespace cuda
       image_buffer[k] = static_cast<uint8_t>(min( max( color.z * 255.0f, 0.0f ), 255.0f ));
    }
 
-   PhotonMap::PhotonMap() : Device(), ObjectNum( 0 )
+   PhotonMap::PhotonMap() : Device(), LightNum( 0 ), ObjectNum( 0 ), TotalLightPower( 0.0f )
    {
       ViewMatrix = getViewMatrix(
          make_float3( 0.0f, 250.0f, 750.0f ),
@@ -1150,27 +1126,28 @@ namespace cuda
       std::cout << ">> Create Photon Map ...\n";
       constexpr int block_num = 128;
       constexpr int thread_num = 512;
-      const auto object_num = static_cast<int>(Materials.size());
 
       std::vector<uint> seed(1);
       std::seed_seq sequence{ std::chrono::system_clock::now().time_since_epoch().count() };
       sequence.generate( seed.begin(), seed.end() );
 
-      int* emitted_photon_num = nullptr;
-      CHECK_CUDA( cudaMalloc( reinterpret_cast<void**>(&emitted_photon_num), sizeof( int ) ) );
-      CHECK_CUDA( cudaMemset( emitted_photon_num, 0, sizeof( int ) ) );
+      int emitted_num = 0;
+      CHECK_CUDA( cudaMemcpyToSymbol( emitted_photon_num, &emitted_num, sizeof( int ), 0, cudaMemcpyHostToDevice ) );
 
       cuCreatePhotonMap<<<block_num, thread_num>>>(
-         Device.GlobalPhotonsPtr, emitted_photon_num,
+         Device.GlobalPhotonsPtr,
          Device.AreaLightsPtr, Device.MaterialsPtr, Device.WorldBoundsPtr, Device.ToWorldsPtr,
          Device.VertexPtr, Device.NormalPtr, Device.IndexPtr, Device.VertexSizesPtr, Device.IndexSizesPtr,
-         object_num, seed[0]
+         LightNum, ObjectNum, seed[0]
       );
       CHECK_KERNEL;
+      CHECK_CUDA( cudaDeviceSynchronize() );
 
-      cuScalePower<<<block_num, thread_num>>>( Device.GlobalPhotonsPtr, emitted_photon_num, MaxGlobalPhotonNum );
+      CHECK_CUDA( cudaMemcpyFromSymbol( &emitted_num, emitted_photon_num, sizeof( int ), 0, cudaMemcpyDeviceToHost ) );
+      std::cout << ">> Emitted Photon Num: " << emitted_num << "\n";
+
+      cuScalePower<<<block_num, thread_num>>>( Device.GlobalPhotonsPtr, TotalLightPower, MaxGlobalPhotonNum );
       CHECK_KERNEL;
-      cudaFree( emitted_photon_num );
       std::cout << ">> Created Photon Map\n";
 
       std::cout << ">> Build Global Photon Map ...\n";
@@ -1255,7 +1232,8 @@ namespace cuda
          Device.GlobalPhotonsPtr, GlobalPhotonTree->getRoot(),
          Device.AreaLightsPtr, Device.MaterialsPtr, Device.WorldBoundsPtr, Device.ToWorldsPtr,
          Device.VertexPtr, Device.NormalPtr, Device.IndexPtr, Device.VertexSizesPtr, Device.IndexSizesPtr,
-         InverseViewMatrix, GlobalPhotonTree->getRootNode(), width, height, ObjectNum, MaxGlobalPhotonNum, seed[0]
+         InverseViewMatrix, GlobalPhotonTree->getRootNode(), width, height,
+         LightNum, ObjectNum, MaxGlobalPhotonNum, seed[0]
       );
       CHECK_KERNEL;
 
@@ -1368,6 +1346,54 @@ namespace cuda
       );
    }
 
+   void PhotonMap::readObjectFile(
+      std::vector<float3>& vertex_buffer,
+      std::vector<float3>& normal_buffer,
+      std::vector<int>& vertex_indices,
+      const std::string& file_path
+   )
+   {
+      std::ifstream file(file_path);
+
+      assert( file.is_open() );
+
+      bool found_normals = false;
+      std::vector<int> normal_indices;
+      while (!file.eof()) {
+         std::string word;
+         file >> word;
+
+         if (word == "v") {
+            float3 vertex;
+            file >> vertex.x >> vertex.y >> vertex.z;
+            vertex_buffer.emplace_back( vertex );
+         }
+         else if (word == "vn") {
+            float3 normal;
+            file >> normal.x >> normal.y >> normal.z;
+            normal_buffer.emplace_back( normal );
+            found_normals = true;
+         }
+         else if (word == "f") {
+            std::string face;
+            const std::regex delimiter("[/]");
+            for (int i = 0; i < 3; ++i) {
+               file >> face;
+               const std::sregex_token_iterator it(face.begin(), face.end(), delimiter, -1);
+               const std::vector<std::string> vtn(it, std::sregex_token_iterator());
+               vertex_indices.emplace_back( std::stoi( vtn[0] ) - 1 );
+               if (found_normals && isNumber( vtn[2] )) {
+                  normal_indices.emplace_back( std::stoi( vtn[2] ) - 1 );
+                  found_normals = false;
+               }
+            }
+         }
+         else std::getline( file, word );
+      }
+
+      if (!found_normals) findNormals( normal_buffer, vertex_buffer, vertex_indices );
+   }
+
    Material PhotonMap::getMaterial(const std::string& mtl_file_path)
    {
       std::ifstream file(mtl_file_path);
@@ -1417,7 +1443,7 @@ namespace cuda
       return material;
    }
 
-   void PhotonMap::setObjects(const std::vector<std::tuple<std::string, std::string, cuda::Mat>>& objects)
+   void PhotonMap::setObjects(const std::vector<std::tuple<std::string, std::string, Mat>>& objects)
    {
       Box box;
       for (size_t i = 0; i < objects.size(); ++i) {
@@ -1428,35 +1454,33 @@ namespace cuda
       }
    }
 
-   void PhotonMap::setLights(const std::vector<std::tuple<std::string, std::string, cuda::Mat>>& lights)
+   void PhotonMap::setLights(const std::vector<std::tuple<std::string, std::string, Mat>>& lights)
    {
-      Box box;
       for (const auto& light : lights) {
-         const auto offset = static_cast<int>(Vertices.size());
-         const auto index_offset = static_cast<int>(Indices.size());
-         Materials.emplace_back( getMaterial( std::get<1>( light ) ) );
-         ToWorlds.emplace_back( std::get<2>( light ) );
-         readObjectFile( box, ToWorlds.back(), std::get<0>( light ) );
-         WorldBounds.emplace_back( box.MinPoint, box.MaxPoint );
+         std::vector<int> vertex_indices;
+         std::vector<float3> vertex_buffer, normal_buffer;
+         readObjectFile( vertex_buffer, normal_buffer, vertex_indices, std::get<0>( light ) );
+         const Material material = getMaterial( std::get<1>( light ) );
+         const Mat m = std::get<2>( light );
 
-         const auto& m = ToWorlds.back();
-         for (int j = index_offset; j < static_cast<int>(Indices.size()); j += 3) {
-            const int n0 = offset + Indices[j];
-            const int n1 = offset + Indices[j + 1];
-            const int n2 = offset + Indices[j + 2];
-            const float3 v0 = transform( m, Vertices[n0] );
-            const float3 v1 = transform( m, Vertices[n1] );
-            const float3 v2 = transform( m, Vertices[n2] );
-            const float3 normal = cross( v1 - v0, v2 - v0 );
+         for (int i = 0; i < static_cast<int>(vertex_indices.size()); i += 3) {
+            const int n0 = vertex_indices[i];
+            const int n1 = vertex_indices[i + 1];
+            const int n2 = vertex_indices[i + 2];
+            const float3 v0 = transform( m, vertex_buffer[n0] );
+            const float3 v1 = transform( m, vertex_buffer[n1] );
+            const float3 v2 = transform( m, vertex_buffer[n2] );
+            const float area = length( cross( v1 - v0, v2 - v0 ) ) * 0.5f;
+            const float power = 2.0f * CUDART_PI_F * area *
+               std::max( std::max( material.Emission.x, material.Emission.y ), material.Emission.z );
+            TotalLightPower += power;
             AreaLights.emplace_back(
-               length( normal ) * 0.5f,
-               Materials.back().Emission,
-               Normals[n0],
-               Vertices[n0], Vertices[n1], Vertices[n2],
-               m
+               area, power, material.Diffuse, material.Emission,
+               normal_buffer[n0], vertex_buffer[n0], vertex_buffer[n1], vertex_buffer[n2], m
             );
          }
       }
+      LightNum = static_cast<int>(AreaLights.size());
    }
 }
 #endif
