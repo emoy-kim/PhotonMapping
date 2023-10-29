@@ -12,12 +12,10 @@
 
 namespace cuda
 {
-   static constexpr int SampleNum = 30;
-   static constexpr int MaxDepth = 64;
+   static constexpr int SampleNum = 32;
+   static constexpr int MaxDepth = 128;
    static constexpr int NeighborNum = 64;
    static constexpr int MaxGlobalPhotonNum = 1'048'576;
-   static constexpr int LightSampleNum = 128;
-   static constexpr float OneOverPi = CUDART_2_OVER_PI_F * 0.5f;
    static constexpr float RayEpsilon = 1e-3f;
 
    struct Mat
