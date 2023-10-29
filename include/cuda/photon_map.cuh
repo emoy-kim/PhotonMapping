@@ -208,11 +208,12 @@ namespace cuda
       Box(const float3& min, const float3& max) : MinPoint( min ), MaxPoint( max ) {}
    };
 
-   enum MATERIAL_TYPE { LAMBERT = 0, MIRROR, GLASS };
-
    struct Material
    {
-      int MaterialType;
+      bool UseAmbient;
+      bool UseSpecular;
+      bool UseReflectionRay;
+      bool UseRefractionRay;
       float SpecularExponent;
       float RefractiveIndex;
       float3 Ambient;
@@ -221,16 +222,21 @@ namespace cuda
       float3 Emission;
 
       Material() :
-         MaterialType( 0 ), SpecularExponent( 1.0f ), RefractiveIndex( 1.0f ),
+         UseAmbient( false ), UseSpecular( false ), UseReflectionRay( false ), UseRefractionRay( false ),
+         SpecularExponent( 1.0f ), RefractiveIndex( 1.0f ),
          Ambient( make_float3( 0.0f, 0.0f, 0.0f ) ), Diffuse( make_float3( 0.0f, 0.0f, 0.0f ) ),
          Specular( make_float3( 0.0f, 0.0f, 0.0f ) ), Emission( make_float3( 0.0f, 0.0f, 0.0f ) ) {}
 
       __device__
-      bool isDiffuse() const { return Diffuse.x > 0.0f || Diffuse.y > 0.0f || Diffuse.z > 0.0f; }
+      bool useAmbient() const { return UseAmbient; }
       __device__
-      bool isSpecular() const { return Specular.x > 0.0f || Specular.y > 0.0f || Specular.z > 0.0f; }
+      bool useDiffuse() const { return Diffuse.x > 0.0f || Diffuse.y > 0.0f || Diffuse.z > 0.0f; }
       __device__
-      bool refractive() const { return RefractiveIndex > 1.0f; }
+      bool useSpecular() const { return UseSpecular; }
+      __device__
+      bool useReflectionRay() const { return UseReflectionRay; }
+      __device__
+      bool useRefractionRay() const { return UseRefractionRay; }
    };
 
    struct AreaLight
@@ -238,6 +244,7 @@ namespace cuda
       float Area;
       float Power;
       float3 Color;
+      float3 Ambient;
       float3 Emission;
       float3 Normal;
       float3 Vertex0;
@@ -249,6 +256,7 @@ namespace cuda
          float area,
          float power,
          const float3& color,
+         const float3& ambient,
          const float3& emission,
          const float3& normal,
          const float3& v0,
@@ -256,20 +264,19 @@ namespace cuda
          const float3& v2,
          const Mat& m
       ) :
-         Area( area ), Power( power ), Color( color ), Emission( emission ), Normal( normal ), Vertex0( v0 ),
-         Vertex1( v1 ), Vertex2( v2 ), ToWorld( m ) {}
+         Area( area ), Power( power ), Color( color ), Ambient( ambient ), Emission( emission ), Normal( normal ),
+         Vertex0( v0 ), Vertex1( v1 ), Vertex2( v2 ), ToWorld( m ) {}
    };
 
    struct IntersectionInfo
    {
       int ObjectIndex;
       float3 Position;
-      float3 Normal;
       float3 ShadingNormal;
 
       __host__ __device__
       IntersectionInfo() :
-         ObjectIndex( -1 ), Position( make_float3( 0.0f, 0.0f, 0.0f ) ), Normal( make_float3( 0.0f, 0.0f, 0.0f ) ),
+         ObjectIndex( -1 ), Position( make_float3( 0.0f, 0.0f, 0.0f ) ),
          ShadingNormal( make_float3( 0.0f, 0.0f, 0.0f ) ) {}
    };
 

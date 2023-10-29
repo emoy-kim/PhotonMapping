@@ -281,7 +281,6 @@ namespace cuda
                      const float3 n2 = normalize( transformVector( vector_transform, normals[k2] ) );
                      distance = tuv.x;
                      intersection.ObjectIndex = i;
-                     intersection.Normal = (n0 + n1 + n2) / 3.0f;
                      intersection.Position = ray_origin + tuv.x * ray_direction;
                      intersection.ShadingNormal = (1.0f - tuv.y - tuv.z) * n0 + tuv.y * n1 + tuv.z * n2;
                      intersect = true;
@@ -369,7 +368,7 @@ namespace cuda
                )) break;
 
             const Material& m = materials[intersection.ObjectIndex];
-            if (m.isDiffuse()) {
+            if (m.useDiffuse()) {
                photons[index + generated_num].Power = color;
                photons[index + generated_num].Position = intersection.Position;
                photons[index + generated_num].IncomingDirection = -ray_direction;
@@ -378,7 +377,7 @@ namespace cuda
             }
 
             float fresnel = 0.0f;
-            if (m.refractive()) {
+            if (m.useRefractionRay()) {
                fresnel =
                   getSchlickApproximation( dot( -ray_direction, intersection.ShadingNormal ), 1.0f, m.RefractiveIndex );
             }
@@ -396,10 +395,12 @@ namespace cuda
                color *= m.Diffuse / diffuse_probability;
             }
             else if (r < diffuse_probability + refractive_probability) {
+               if (!m.UseRefractionRay) break;
                outgoing = getRefractiveDirection( ray_direction, intersection.ShadingNormal, m.RefractiveIndex );
                color *= (1.0f - fresnel) / refractive_probability;
             }
             else if (r < probability_sum) {
+               if (!m.UseReflectionRay) break;
                outgoing = reflect( ray_direction, intersection.ShadingNormal );
                color *= (m.Specular + fresnel) / specular_probability;
             }
@@ -742,7 +743,6 @@ namespace cuda
       const Material* materials,
       const Box* world_bounds,
       const Mat* to_worlds,
-      const float3& ray_origin,
       const float3& ray_direction,
       const float3* vertices,
       const float3* normals,
@@ -751,8 +751,7 @@ namespace cuda
       const int* index_sizes,
       curandState* state,
       int light_num,
-      int object_num,
-      int sample_num
+      int object_num
    )
    {
       float3 radiance = make_float3( 0.0f, 0.0f, 0.0f );
@@ -768,32 +767,28 @@ namespace cuda
          float3 light_position = (1.0f - a - b) * v0 + a * v1 + b * v2;
          light_position = transform( lights[i].ToWorld, light_position );
 
-         const float3 normal = lights[i].Normal;
-         float3 light_direction = getSamplePointAroundAxis( normal, state );
-         const Mat n = getVectorTransform( lights[i].ToWorld );
-         light_direction = transformVector( n, light_direction );
-         light_position += RayEpsilon * light_direction;
-
          const float3 l = normalize( light_position - intersection.Position );
-         const float d = dot( l, intersection.ShadingNormal );
-         if (d <= 0.0f) continue;
+         const float diffuse_intensity = dot( l, intersection.ShadingNormal );
+         if (diffuse_intensity <= 0.0f) continue;
 
          IntersectionInfo shadow_intersection;
          float3 shadow_ray_direction = l;
-         float3 shadow_ray_origin = intersection.Position;
-         if (!findIntersection(
+         float3 shadow_ray_origin = intersection.Position + RayEpsilon * l;
+         const float length_to_light = length( light_position - intersection.Position );
+         const bool intersect = findIntersection(
             shadow_intersection, world_bounds, to_worlds, vertices, normals, indices, vertex_sizes, index_sizes,
             shadow_ray_origin, shadow_ray_direction, object_num
-         )) {
-            float3 diffuse = make_float3( 0.0f, 0.0f, 0.0f );
+         );
+         if (!intersect ||
+             length( shadow_intersection.Position - intersection.Position ) >= length_to_light - RayEpsilon) {
+            const float3 diffuse = lights[i].Color * diffuse_intensity * m.Diffuse;
             float3 specular = make_float3( 0.0f, 0.0f, 0.0f );
-            for (int j = 0; j < sample_num; ++j) {
-               const float3 c = lights[i].Color * dot( light_direction, -l ) * 2.0f * d;
-               const float s = dot( -ray_direction, reflect( -l, intersection.ShadingNormal ) );
-               diffuse += c * m.Diffuse;
-               if (s > 0.0f) specular += c * m.Specular * pow( s, m.SpecularExponent );
+            const float specular_intensity = dot( -ray_direction, reflect( -l, intersection.ShadingNormal ) );
+            if (specular_intensity > 0.0f) {
+               specular += lights[i].Color * m.Specular * pow( specular_intensity, m.SpecularExponent );
             }
-            radiance += (diffuse + specular) * lights[i].Area / static_cast<float>(sample_num);
+            radiance += diffuse + specular;
+            if (m.useAmbient()) radiance += lights[i].Ambient * m.Ambient;
          }
       }
       return radiance + m.Emission;
@@ -840,7 +835,7 @@ namespace cuda
 
          float fresnel = 0.0f;
          const Material& m = materials[next_intersection.ObjectIndex];
-         if (m.refractive()) {
+         if (m.useRefractionRay()) {
             fresnel =
                getSchlickApproximation( dot( -ray_direction, next_intersection.ShadingNormal ), 1.0f, m.RefractiveIndex );
          }
@@ -861,10 +856,12 @@ namespace cuda
             break;
          }
          else if (r < diffuse_probability + refractive_probability) {
+            if (!m.UseRefractionRay) break;
             weight *= (1.0f - fresnel) / refractive_probability;
             ray_direction = getRefractiveDirection( ray_direction, next_intersection.ShadingNormal, m.RefractiveIndex );
          }
          else if (r < probability_sum) {
+            if (!m.UseReflectionRay) break;
             weight *= (m.Specular + fresnel) / specular_probability;
             ray_direction = reflect( ray_direction, next_intersection.ShadingNormal );
          }
@@ -916,17 +913,17 @@ namespace cuda
          }
 
          const Material& m = materials[next_intersection.ObjectIndex];
-         if (m.isDiffuse() || m.isSpecular()) {
+         if (m.useDiffuse() || m.useSpecular()) {
             color += light_emission + computeDirectIllumination(
-               next_intersection, lights, materials, world_bounds, to_worlds, ray_origin, ray_direction,
-               vertices, normals, indices, vertex_sizes, index_sizes, state, light_num, object_num, 2
+               next_intersection, lights, materials, world_bounds, to_worlds, ray_direction,
+               vertices, normals, indices, vertex_sizes, index_sizes, state, light_num, object_num
             );
          }
          //if (m.isDiffuse()) color += computeCausticsWithPhotonMap();
          radiance += color * weight;
 
          float fresnel = 0.0f;
-         if (m.refractive()) {
+         if (m.useRefractionRay()) {
             fresnel =
                getSchlickApproximation( dot( -ray_direction, next_intersection.ShadingNormal ), 1.0f, m.RefractiveIndex );
          }
@@ -947,10 +944,12 @@ namespace cuda
             break;
          }
          else if (r < diffuse_probability + refractive_probability) {
+            if (!m.UseRefractionRay) break;
             weight *= (1.0f - fresnel) / refractive_probability;
             ray_direction = getRefractiveDirection( ray_direction, next_intersection.ShadingNormal, m.RefractiveIndex );
          }
          else if (r < probability_sum) {
+            if (!m.UseReflectionRay) break;
             weight *= (m.Specular + fresnel) / specular_probability;
             ray_direction = reflect( ray_direction, next_intersection.ShadingNormal );
          }
@@ -994,16 +993,15 @@ namespace cuda
       )) return light_emission;
 
       const Material& m = materials[intersection.ObjectIndex];
-      radiance += m.Ambient;
-      if (m.isDiffuse() || m.isSpecular()) {
-         radiance += light_emission + computeDirectIllumination(
-            intersection, lights, materials, world_bounds, to_worlds, ray_origin, ray_direction,
-            vertices, normals, indices, vertex_sizes, index_sizes, state, light_num, object_num, LightSampleNum
+      if (m.useDiffuse() || m.useSpecular()) {
+         radiance += computeDirectIllumination(
+            intersection, lights, materials, world_bounds, to_worlds, ray_direction,
+            vertices, normals, indices, vertex_sizes, index_sizes, state, light_num, object_num
          );
       }
 
       float fresnel = 0.0f;
-      if (m.refractive()) {
+      if (m.useRefractionRay()) {
          fresnel =
             getSchlickApproximation( dot( -ray_direction, intersection.ShadingNormal ), 1.0f, m.RefractiveIndex );
          if (fresnel < 1.0f) {
@@ -1015,14 +1013,14 @@ namespace cuda
             ) * (1.0f - fresnel);
          }
       }
-      if (m.isSpecular() || fresnel > 0.0f) {
+      if (m.useReflectionRay() || fresnel > 0.0f) {
          const float3 outgoing = reflect( ray_direction, intersection.ShadingNormal );
          radiance += trace(
             intersection, root, photons, lights, materials, world_bounds, to_worlds, outgoing,
             vertices, normals, indices, vertex_sizes, index_sizes, state, root_node, light_num, object_num, size
          ) * (m.Specular + fresnel);
       }
-      if (m.isDiffuse()) {
+      if (m.useDiffuse()) {
          radiance += computeIndirectIllumination(
             intersection, root, photons, lights, materials, world_bounds, to_worlds,
             vertices, normals, indices, vertex_sizes, index_sizes, state, root_node, light_num, object_num, size
@@ -1439,6 +1437,7 @@ namespace cuda
       if (!found_normals) findNormals( normal_buffer, vertex_buffer, vertex_indices );
    }
 
+   // reference: https://paulbourke.net/dataformats/mtl/
    Material PhotonMap::getMaterial(const std::string& mtl_file_path)
    {
       std::ifstream file(mtl_file_path);
@@ -1479,9 +1478,24 @@ namespace cuda
          else if (parsed[0] == "Ni") material.RefractiveIndex = std::stof( parsed[1] );
          else if (parsed[0] == "illum") {
             switch (std::stoi( parsed[1] )) {
-               case 5: material.MaterialType = MATERIAL_TYPE::MIRROR; break;
-               case 7: material.MaterialType = MATERIAL_TYPE::GLASS; break;
-               default: material.MaterialType = MATERIAL_TYPE::LAMBERT; break;
+               case 1:
+                  material.UseAmbient = true;
+                  break;
+               case 2:
+                  material.UseAmbient = true;
+                  material.UseSpecular = true;
+                  break;
+               case 3: case 4: case 5:
+                  material.UseAmbient = true;
+                  material.UseSpecular = true;
+                  material.UseReflectionRay = true;
+                  break;
+               case 6: case 7:
+                  material.UseAmbient = true;
+                  material.UseSpecular = true;
+                  material.UseRefractionRay = true;
+                  break;
+               default: break;
             }
          }
       }
@@ -1520,7 +1534,7 @@ namespace cuda
                std::max( std::max( material.Emission.x, material.Emission.y ), material.Emission.z );
             TotalLightPower += power;
             AreaLights.emplace_back(
-               area, power, material.Diffuse, material.Emission,
+               area, power, material.Diffuse, material.Ambient, material.Emission,
                normal_buffer[n0], vertex_buffer[n0], vertex_buffer[n1], vertex_buffer[n2], m
             );
          }
