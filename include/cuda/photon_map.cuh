@@ -13,6 +13,8 @@
 namespace cuda
 {
    static constexpr int SampleNum = 32;
+   static constexpr int IndirectSampleNum = 8;
+   static constexpr int TransmissiveSampleNum = 8;
    static constexpr int MaxDepth = 128;
    static constexpr int NeighborNum = 64;
    static constexpr int MaxGlobalPhotonNum = 1'048'576;
@@ -209,9 +211,11 @@ namespace cuda
    struct Material
    {
       bool UseAmbient;
+      bool UseDiffuse;
       bool UseSpecular;
       bool UseReflectionRay;
       bool UseRefractionRay;
+      bool Transparent;
       float SpecularExponent;
       float RefractiveIndex;
       float3 Ambient;
@@ -220,21 +224,23 @@ namespace cuda
       float3 Emission;
 
       Material() :
-         UseAmbient( false ), UseSpecular( false ), UseReflectionRay( false ), UseRefractionRay( false ),
-         SpecularExponent( 1.0f ), RefractiveIndex( 1.0f ),
+         UseAmbient( false ), UseDiffuse( false ), UseSpecular( false ), UseReflectionRay( false ),
+         UseRefractionRay( false ), Transparent( false ), SpecularExponent( 1.0f ), RefractiveIndex( 1.0f ),
          Ambient( make_float3( 0.0f, 0.0f, 0.0f ) ), Diffuse( make_float3( 0.0f, 0.0f, 0.0f ) ),
          Specular( make_float3( 0.0f, 0.0f, 0.0f ) ), Emission( make_float3( 0.0f, 0.0f, 0.0f ) ) {}
 
       __device__
       bool useAmbient() const { return UseAmbient; }
       __device__
-      bool useDiffuse() const { return Diffuse.x > 0.0f || Diffuse.y > 0.0f || Diffuse.z > 0.0f; }
+      bool useDiffuse() const { return UseDiffuse; }
       __device__
       bool useSpecular() const { return UseSpecular; }
       __device__
       bool useReflectionRay() const { return UseReflectionRay; }
       __device__
       bool useRefractionRay() const { return UseRefractionRay; }
+      __device__
+      bool transparent() const { return Transparent; }
    };
 
    struct AreaLight
