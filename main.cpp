@@ -3,7 +3,7 @@
 
 void testCUDA()
 {
-   const glm::mat4 to_world = glm::scale( glm::mat4(1.0f), glm::vec3(300.0f) );
+   const glm::mat4 to_world(1.0f);
    cuda::Mat cornell_box_scale;
    cornell_box_scale.c0 = make_float4( to_world[0][0], to_world[0][1], to_world[0][2], to_world[0][3] );
    cornell_box_scale.c1 = make_float4( to_world[1][0], to_world[1][1], to_world[1][2], to_world[1][3] );
@@ -67,7 +67,7 @@ void testCUDA()
    photon_map.setLights( lights );
    photon_map.createPhotonMap();
    //photon_map.visualizePhotonMap( 1024, 1024 );
-   photon_map.render( 1024, 1024 );
+   photon_map.render( 256, 256 );
 }
 
 int main()

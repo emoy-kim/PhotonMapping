@@ -222,12 +222,14 @@ namespace cuda
       float3 Diffuse;
       float3 Specular;
       float3 Emission;
+      float3 Transmission;
 
       Material() :
          UseAmbient( false ), UseDiffuse( false ), UseSpecular( false ), UseReflectionRay( false ),
          UseRefractionRay( false ), Transparent( false ), SpecularExponent( 1.0f ), RefractiveIndex( 1.0f ),
          Ambient( make_float3( 0.0f, 0.0f, 0.0f ) ), Diffuse( make_float3( 0.0f, 0.0f, 0.0f ) ),
-         Specular( make_float3( 0.0f, 0.0f, 0.0f ) ), Emission( make_float3( 0.0f, 0.0f, 0.0f ) ) {}
+         Specular( make_float3( 0.0f, 0.0f, 0.0f ) ), Emission( make_float3( 0.0f, 0.0f, 0.0f ) ),
+         Transmission( make_float3( 0.0f, 0.0f, 0.0f ) ) {}
 
       __device__
       bool useAmbient() const { return UseAmbient; }
