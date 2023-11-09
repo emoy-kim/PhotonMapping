@@ -690,6 +690,39 @@ namespace cuda
       else image_buffer[k] = image_buffer[k + 1] = image_buffer[k + 2] = 0;
    }
 
+   __global__
+   void cuVisualizeAllPhotons(
+      uint8_t* image_buffer,
+      const Photon* photons,
+      Mat view,
+      int width,
+      int height,
+      int size
+   )
+   {
+      const auto index = static_cast<int>(blockIdx.x * blockDim.x + threadIdx.x);
+      const auto step = static_cast<int>(blockDim.x * gridDim.x);
+      const auto w = static_cast<float>(width);
+      const auto h = static_cast<float>(height);
+      for (int i = index; i < size; i += step) {
+         const float3 p = transform( view, photons[i].Position );
+         const float u = p.x / -p.z;
+         const float v = p.y / -p.z;
+         const auto x = static_cast<int>((u * h + w) * 0.5f);
+         const auto y = static_cast<int>((v * h + h) * 0.5f);
+         if (0 <= x && x < width && 0 <= y && y < height) {
+            const int k = (y * width + x) * 3;
+            float3 power = photons[i].Power * static_cast<float>(emitted_photon_num);
+            power.x = min( max( power.x * 255.0f, 0.0f ), 255.0f );
+            power.y = min( max( power.y * 255.0f, 0.0f ), 255.0f );
+            power.z = min( max( power.z * 255.0f, 0.0f ), 255.0f );
+            image_buffer[k] = static_cast<uint8_t>(power.x);
+            image_buffer[k + 1] = static_cast<uint8_t>(power.y);
+            image_buffer[k + 2] = static_cast<uint8_t>(power.z);
+         }
+      }
+   }
+
    __device__
    bool hitLight(
       float3& color,
@@ -965,15 +998,9 @@ namespace cuda
 
          if (r < diffuse_probability) {
             if (m.useDiffuse()) {
-               float3 indirect = make_float3( 0.0f, 0.0f, 0.0f );
-               for (int s = 0; s < IndirectSampleNum; ++s) {
-                  indirect += computeIndirectIllumination(
-                     next_intersection, root, photons, lights, materials, world_bounds, to_worlds,
-                     vertices, normals, indices, vertex_sizes, index_sizes, state,
-                     root_node, light_num, object_num, size
-                  );
-               }
-               radiance += indirect * weight / static_cast<float>(IndirectSampleNum) * (m.Diffuse / diffuse_probability);
+               radiance += computeRadianceWithPhotonMap(
+                  next_intersection, root, photons, materials, ray_direction, root_node, size
+               ) * weight * (m.Diffuse / diffuse_probability);
             }
             break;
          }
@@ -1061,10 +1088,14 @@ namespace cuda
          ) * (m.Specular + fresnel * m.Transmission);
       }
       if (m.useDiffuse()) {
-         radiance += computeIndirectIllumination(
-            intersection, root, photons, lights, materials, world_bounds, to_worlds,
-            vertices, normals, indices, vertex_sizes, index_sizes, state, root_node, light_num, object_num, size
-         ) * m.Diffuse;
+         float3 indirect = make_float3( 0.0f, 0.0f, 0.0f );
+         for (int s = 0; s < IndirectSampleNum; ++s) {
+            indirect += computeIndirectIllumination(
+               intersection, root, photons, lights, materials, world_bounds, to_worlds,
+               vertices, normals, indices, vertex_sizes, index_sizes, state, root_node, light_num, object_num, size
+            );
+         }
+         radiance += m.Diffuse * indirect / static_cast<float>(IndirectSampleNum);
          //radiance += computeCausticsWithPhotonMap();
          radiance +=
             computeRadianceWithPhotonMap( intersection, root, photons, materials, ray_direction, root_node, size );
@@ -1215,7 +1246,9 @@ namespace cuda
       int emitted_num = 0;
       CHECK_CUDA( cudaMemcpyToSymbol( emitted_photon_num, &emitted_num, sizeof( int ), 0, cudaMemcpyHostToDevice ) );
 
-      cuCreatePhotonMap<<<8, thread_num>>>(
+      // The block/thread size should be sufficiently small
+      // to distribute photons as uniformly as possible and increase the number of bounces.
+      cuCreatePhotonMap<<<128, 512>>>(
          Device.GlobalPhotonsPtr,
          Device.AreaLightsPtr, Device.MaterialsPtr, Device.WorldBoundsPtr, Device.ToWorldsPtr,
          Device.VertexPtr, Device.NormalPtr, Device.IndexPtr, Device.VertexSizesPtr, Device.IndexSizesPtr,
@@ -1268,7 +1301,7 @@ namespace cuda
       uint8_t* image_buffer_ptr = nullptr;
       const size_t buffer_size = sizeof( uint8_t ) * width * height * 3;
       CHECK_CUDA( cudaMalloc( reinterpret_cast<void**>(&image_buffer_ptr), buffer_size ) );
-
+#if 0
       constexpr dim3 block(32, 32);
       const dim3 grid(divideUp( width, static_cast<int>(block.x) ), divideUp( height, static_cast<int>(block.y) ));
       cuVisualizePhotonMap<<<grid, block>>>(
@@ -1278,6 +1311,11 @@ namespace cuda
          Device.VertexPtr, Device.NormalPtr, Device.IndexPtr, Device.VertexSizesPtr, Device.IndexSizesPtr,
          InverseViewMatrix, GlobalPhotonTree->getRootNode(), width, height, ObjectNum, MaxGlobalPhotonNum
       );
+#else
+      cuVisualizeAllPhotons<<<128, 512>>>(
+         image_buffer_ptr, Device.GlobalPhotonsPtr, ViewMatrix, width, height, MaxGlobalPhotonNum
+      );
+#endif
       CHECK_KERNEL;
       CHECK_CUDA( cudaDeviceSynchronize() );
 
