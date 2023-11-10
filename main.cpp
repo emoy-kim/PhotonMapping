@@ -66,8 +66,8 @@ void testCUDA()
    photon_map.setObjects( objects );
    photon_map.setLights( lights );
    photon_map.createPhotonMap();
-   //photon_map.visualizePhotonMap( 1024, 1024 );
-   photon_map.render( 1024, 1024 );
+   //photon_map.visualizePhotonMap( 800, 800 );
+   photon_map.render( 800, 800 );
 }
 
 int main()

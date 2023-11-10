@@ -13,12 +13,13 @@
 namespace cuda
 {
    static constexpr int SampleNum = 32;
-   static constexpr int IndirectSampleNum = 64;
-   static constexpr int TransmissiveSampleNum = 64;
+   static constexpr int IndirectSampleNum = 8;
+   static constexpr int TransmissiveSampleNum = 8;
    static constexpr int MaxDepth = 128;
    static constexpr int NeighborNum = 64;
-   static constexpr int MaxGlobalPhotonNum = 4'194'304;
+   static constexpr int MaxGlobalPhotonNum = 1'048'576;
    static constexpr float RayEpsilon = 1e-3f;
+   static constexpr float FocalLength = 0.8f;
 
    struct Mat
    {

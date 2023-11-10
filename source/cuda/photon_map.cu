@@ -664,7 +664,8 @@ namespace cuda
       const float u = (2.0f * static_cast<float>(x) - w) / h;
       const float v = (2.0f * static_cast<float>(y) - h) / h;
       const float3 ray_origin = make_float3( inverse_view.c3.x, inverse_view.c3.y, inverse_view.c3.z );
-      const float3 ray_direction = normalize( transform( inverse_view, make_float3( u, v, -1.0f ) ) - ray_origin );
+      const float3 ray_direction =
+         normalize( transform( inverse_view, make_float3( u, v, -FocalLength ) ) - ray_origin );
 
       IntersectionInfo intersection;
       if (!findIntersection(
@@ -1141,7 +1142,8 @@ namespace cuda
       for (int s = 0; s < SampleNum; ++s) {
          const float u = (2.0f * (static_cast<float>(x) + getRandomValue( &state, 0.0f, 1.0f )) - w) / h;
          const float v = (2.0f * (static_cast<float>(y) + getRandomValue( &state, 0.0f, 1.0f )) - h) / h;
-         const float3 ray_direction = normalize( transform( inverse_view, make_float3( u, v, -1.0f ) ) - ray_origin );
+         const float3 ray_direction =
+            normalize( transform( inverse_view, make_float3( u, v, -FocalLength ) ) - ray_origin );
          color += estimateRadiance(
             photons, lights, materials, root, world_bounds, to_worlds, ray_origin, ray_direction,
             vertices, normals, indices, vertex_sizes, index_sizes, &state, root_node, light_num, object_num, size
@@ -1158,8 +1160,8 @@ namespace cuda
    PhotonMap::PhotonMap() : Device(), LightNum( 0 ), ObjectNum( 0 ), TotalLightPower( 0.0f )
    {
       ViewMatrix = getViewMatrix(
-         make_float3( 0.0f, 0.833f, 2.5f ),
-         make_float3( 0.0f, 0.833f, 0.0f ),
+         make_float3( 0.0f, 0.733f, 1.5f ),
+         make_float3( 0.0f, 0.733f, 0.0f ),
          make_float3( 0.0f, 1.0f, 0.0f )
       );
       InverseViewMatrix = inverse( ViewMatrix );
