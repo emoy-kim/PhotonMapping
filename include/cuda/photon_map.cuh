@@ -12,14 +12,16 @@
 
 namespace cuda
 {
-   static constexpr int SampleNum = 32;
-   static constexpr int IndirectSampleNum = 8;
-   static constexpr int TransmissiveSampleNum = 8;
+   static constexpr int SampleNum = 8;
+   static constexpr int IndirectSampleNum = 16;
+   static constexpr int TransmissiveSampleNum = 16;
    static constexpr int MaxDepth = 128;
    static constexpr int NeighborNum = 64;
    static constexpr int MaxGlobalPhotonNum = 1'048'576;
+   static constexpr int MaxCausticPhotonNum = 1'048'576;
    static constexpr float RayEpsilon = 1e-3f;
-   static constexpr float FocalLength = 0.8f;
+   static constexpr float FocalLength = 1.2f;
+   static constexpr float LightFalloffRadiusSquared = 1.1f * 1.1f;
 
    struct Mat
    {
@@ -296,7 +298,8 @@ namespace cuda
       void setObjects(const std::vector<std::tuple<std::string, std::string, cuda::Mat>>& objects);
       void setLights(const std::vector<std::tuple<std::string, std::string, cuda::Mat>>& lights);
       void createPhotonMap();
-      void visualizePhotonMap(int width, int height);
+      void visualizeGlobalPhotonMap(int width, int height);
+      void visualizeCausticPhotonMap(int width, int height);
       void render(int width, int height);
 
    private:
@@ -313,11 +316,12 @@ namespace cuda
          Material* MaterialsPtr;
          AreaLight* AreaLightsPtr;
          Photon* GlobalPhotonsPtr;
+         Photon* CausticPhotonsPtr;
 
          CUDADevice() :
             ID( -1 ), VertexPtr( nullptr ), NormalPtr( nullptr ), IndexPtr( nullptr ), VertexSizesPtr( nullptr ),
             IndexSizesPtr( nullptr ), WorldBoundsPtr( nullptr ), ToWorldsPtr( nullptr ), MaterialsPtr( nullptr ),
-            AreaLightsPtr( nullptr ), GlobalPhotonsPtr( nullptr ) {}
+            AreaLightsPtr( nullptr ), GlobalPhotonsPtr( nullptr ), CausticPhotonsPtr( nullptr ) {}
       };
 
       CUDADevice Device;
@@ -327,6 +331,7 @@ namespace cuda
       Mat ViewMatrix;
       Mat InverseViewMatrix;
       std::shared_ptr<KdtreeCUDA> GlobalPhotonTree;
+      std::shared_ptr<KdtreeCUDA> CausticPhotonTree;
       std::vector<float3> Vertices;
       std::vector<float3> Normals;
       std::vector<int> Indices;

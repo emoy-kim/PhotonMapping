@@ -48,7 +48,7 @@ void testCUDA()
          cornell_box_scale
       ),
       std::make_tuple(
-         std::string(sample_directory_path + "/CornellBox/water.obj"),
+         std::string(sample_directory_path + "/CornellBox/water_surface.obj"),
          std::string(sample_directory_path + "/CornellBox/water.mtl"),
          cornell_box_scale
       )
@@ -66,7 +66,8 @@ void testCUDA()
    photon_map.setObjects( objects );
    photon_map.setLights( lights );
    photon_map.createPhotonMap();
-   //photon_map.visualizePhotonMap( 800, 800 );
+   //photon_map.visualizeGlobalPhotonMap( 800, 800 );
+   //photon_map.visualizeCausticPhotonMap( 800, 800 );
    photon_map.render( 800, 800 );
 }
 

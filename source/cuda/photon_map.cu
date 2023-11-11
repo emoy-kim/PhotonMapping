@@ -341,6 +341,7 @@ namespace cuda
       return (a.x + a.y + a.z) / 3.0f;
    }
 
+   template<bool caustics = false>
    __global__
    void cuCreatePhotonMap(
       Photon* photons,
@@ -355,12 +356,14 @@ namespace cuda
       const int* index_sizes,
       int light_num,
       int object_num,
+      int size,
       uint seed
    )
    {
       int generated_num = 0;
+      bool can_store = !caustics;
       const auto step = static_cast<int>(blockDim.x * gridDim.x);
-      const int photons_to_generate = divideUp( MaxGlobalPhotonNum, step );
+      const int photons_to_generate = divideUp( size, step );
       const auto index = static_cast<int>(blockIdx.x * blockDim.x + threadIdx.x) * photons_to_generate;
 
       curandState state;
@@ -379,12 +382,12 @@ namespace cuda
                )) break;
 
             const Material& m = materials[intersection.ObjectIndex];
-            if (m.useDiffuse()) {
+            if (can_store && m.useDiffuse()) {
                photons[index + generated_num].Power = power;
                photons[index + generated_num].Position = intersection.Position;
                photons[index + generated_num].IncomingDirection = -ray_direction;
                generated_num++;
-               if (generated_num == photons_to_generate || index + generated_num >= MaxGlobalPhotonNum) return;
+               if (generated_num == photons_to_generate || index + generated_num >= size) return;
             }
 
             float fresnel = 0.0f;
@@ -407,16 +410,20 @@ namespace cuda
 
             float3 outgoing;
             if (r < diffuse_probability) {
+               if (caustics) break;
+
                outgoing = getSamplePointAroundAxis( intersection.ShadingNormal, &state );
                power *= m.Diffuse / diffuse_probability;
             }
             else if (r < diffuse_probability + refractive_probability) {
+               if (caustics) can_store = true;
                outgoing = getRefractiveDirection(
                   ray_direction, intersection.ShadingNormal, in_refractive_index, m.RefractiveIndex
                );
                power *= (1.0f - fresnel) * m.Transmission / refractive_probability;
             }
             else if (r < diffuse_probability + specular_probability + refractive_probability) {
+               if (caustics) can_store = true;
                outgoing = reflect( ray_direction, intersection.ShadingNormal );
                power *= (m.Specular + fresnel * m.Transmission) / specular_probability;
             }
@@ -713,13 +720,7 @@ namespace cuda
          const auto y = static_cast<int>((v * h + h) * 0.5f);
          if (0 <= x && x < width && 0 <= y && y < height) {
             const int k = (y * width + x) * 3;
-            float3 power = photons[i].Power * static_cast<float>(emitted_photon_num);
-            power.x = min( max( power.x * 255.0f, 0.0f ), 255.0f );
-            power.y = min( max( power.y * 255.0f, 0.0f ), 255.0f );
-            power.z = min( max( power.z * 255.0f, 0.0f ), 255.0f );
-            image_buffer[k] = static_cast<uint8_t>(power.x);
-            image_buffer[k + 1] = static_cast<uint8_t>(power.y);
-            image_buffer[k + 2] = static_cast<uint8_t>(power.z);
+            image_buffer[k] = image_buffer[k + 1] = image_buffer[k + 2] = 255;
          }
       }
    }
@@ -827,7 +828,10 @@ namespace cuda
          float3 light_position = (1.0f - a - b) * v0 + a * v1 + b * v2;
          light_position = transform( lights[i].ToWorld, light_position );
 
-         const float3 l = normalize( light_position - intersection.Position );
+         const float3 light_vector = light_position - intersection.Position;
+         const float squared_distance = dot( light_vector, light_vector );
+         const float distance = sqrt( squared_distance );
+         const float3 l = normalize( light_vector );
          const float diffuse_intensity = dot( l, intersection.ShadingNormal );
          if (v_dot_n * diffuse_intensity < 0.0f) continue;
 
@@ -840,9 +844,10 @@ namespace cuda
          );
          if (!intersect ||
              abs( length( shadow_intersection.Position - origin ) - length_to_light ) < RayEpsilon) {
+            const float attenuation = min( max( LightFalloffRadiusSquared / squared_distance, 0.0f ), 1.0f );
             const float3 light_normal =
                normalize( transformVector( getVectorTransform( lights[i].ToWorld ), lights[i].Normal ) );
-            const float3 light_intensity = lights[i].Color * max( dot( -l, light_normal ), 0.0f );
+            const float3 light_intensity = attenuation * lights[i].Color * max( dot( -l, light_normal ), 0.0f );
             if (m.useDiffuse()) radiance += light_intensity * abs( diffuse_intensity ) * m.Diffuse;
             if (m.useSpecular()) {
                const float specular_intensity = dot( -ray_direction, reflect( -l, intersection.ShadingNormal ) );
@@ -937,8 +942,10 @@ namespace cuda
    __device__
    float3 trace(
       const IntersectionInfo& intersection,
-      const KdtreeNode* root,
-      const Photon* photons,
+      const KdtreeNode* global_root,
+      const KdtreeNode* caustic_root,
+      const Photon* global_photons,
+      const Photon* caustic_photons,
       const AreaLight* lights,
       const Material* materials,
       const Box* world_bounds,
@@ -950,7 +957,8 @@ namespace cuda
       const int* vertex_sizes,
       const int* index_sizes,
       curandState* state,
-      int root_node,
+      int global_root_node,
+      int caustic_root_node,
       int light_num,
       int object_num,
       int size
@@ -972,13 +980,17 @@ namespace cuda
          if (hitLight( light_color, ray_origin, ray_direction, lights, light_num )) radiance += light_color * weight;
 
          const Material& m = materials[next_intersection.ObjectIndex];
-         if (m.useDiffuse()) {
+         if (m.useDiffuse() || m.useSpecular()) {
             radiance += computeDirectIllumination(
                next_intersection, lights, materials, world_bounds, to_worlds, ray_direction,
                vertices, normals, indices, vertex_sizes, index_sizes, state, light_num, object_num
             ) * weight;
          }
-         //if (m.isDiffuse()) radiance += computeCausticsWithPhotonMap() * weight;
+         if (m.useDiffuse()) {
+            radiance += computeRadianceWithPhotonMap(
+               next_intersection, caustic_root, caustic_photons, materials, ray_direction, caustic_root_node, size
+            ) * weight;
+         }
 
          float fresnel = 0.0f;
          if (m.useRefractionRay()) {
@@ -1000,7 +1012,7 @@ namespace cuda
          if (r < diffuse_probability) {
             if (m.useDiffuse()) {
                radiance += computeRadianceWithPhotonMap(
-                  next_intersection, root, photons, materials, ray_direction, root_node, size
+                  next_intersection, global_root, global_photons, materials, ray_direction, global_root_node, size
                ) * weight * (m.Diffuse / diffuse_probability);
             }
             break;
@@ -1025,10 +1037,12 @@ namespace cuda
 
    __device__
    float3 estimateRadiance(
-      const Photon* photons,
+      const Photon* global_photons,
+      const Photon* caustic_photons,
       const AreaLight* lights,
       const Material* materials,
-      const KdtreeNode* root,
+      const KdtreeNode* global_root,
+      const KdtreeNode* caustic_root,
       const Box* world_bounds,
       const Mat* to_worlds,
       const float3& ray_origin,
@@ -1039,7 +1053,8 @@ namespace cuda
       const int* vertex_sizes,
       const int* index_sizes,
       curandState* state,
-      int root_node,
+      int global_root_node,
+      int caustic_root_node,
       int light_num,
       int object_num,
       int size
@@ -1056,7 +1071,7 @@ namespace cuda
       if (hitLight( light_color, ray_origin, ray_direction, lights, light_num )) radiance += light_color;
 
       const Material& m = materials[intersection.ObjectIndex];
-      if (m.useDiffuse()) {
+      if (m.useDiffuse() || m.useSpecular()) {
          radiance += computeDirectIllumination(
             intersection, lights, materials, world_bounds, to_worlds, ray_direction,
             vertices, normals, indices, vertex_sizes, index_sizes, state, light_num, object_num
@@ -1074,8 +1089,9 @@ namespace cuda
             float3 transmissive = make_float3( 0.0f, 0.0f, 0.0f );
             for (int i = 0; i < TransmissiveSampleNum; ++i) {
                transmissive += trace(
-                  intersection, root, photons, lights, materials, world_bounds, to_worlds, outgoing,
-                  vertices, normals, indices, vertex_sizes, index_sizes, state, root_node, light_num, object_num, size
+                  intersection, global_root, caustic_root, global_photons, caustic_photons, lights, materials,
+                  world_bounds, to_worlds, outgoing, vertices, normals, indices, vertex_sizes, index_sizes, state,
+                  global_root_node, caustic_root_node, light_num, object_num, size
                );
             }
             radiance += (1.0f - fresnel) * m.Transmission * transmissive / static_cast<float>(TransmissiveSampleNum);
@@ -1084,22 +1100,26 @@ namespace cuda
       if (m.useReflectionRay() || fresnel > 0.0f) {
          const float3 outgoing = reflect( ray_direction, intersection.ShadingNormal );
          radiance += trace(
-            intersection, root, photons, lights, materials, world_bounds, to_worlds, outgoing,
-            vertices, normals, indices, vertex_sizes, index_sizes, state, root_node, light_num, object_num, size
+            intersection, global_root, caustic_root, global_photons, caustic_photons, lights, materials,
+            world_bounds, to_worlds, outgoing, vertices, normals, indices, vertex_sizes, index_sizes, state,
+            global_root_node, caustic_root_node, light_num, object_num, size
          ) * (m.Specular + fresnel * m.Transmission);
       }
       if (m.useDiffuse()) {
          float3 indirect = make_float3( 0.0f, 0.0f, 0.0f );
          for (int s = 0; s < IndirectSampleNum; ++s) {
             indirect += computeIndirectIllumination(
-               intersection, root, photons, lights, materials, world_bounds, to_worlds,
-               vertices, normals, indices, vertex_sizes, index_sizes, state, root_node, light_num, object_num, size
+               intersection, global_root, global_photons, lights, materials, world_bounds, to_worlds,
+               vertices, normals, indices, vertex_sizes, index_sizes, state, global_root_node, light_num, object_num, size
             );
          }
          radiance += m.Diffuse * indirect / static_cast<float>(IndirectSampleNum);
-         //radiance += computeCausticsWithPhotonMap();
-         radiance +=
-            computeRadianceWithPhotonMap( intersection, root, photons, materials, ray_direction, root_node, size );
+         radiance += computeRadianceWithPhotonMap(
+            intersection, caustic_root, caustic_photons, materials, ray_direction, caustic_root_node, size
+         );
+         radiance += computeRadianceWithPhotonMap(
+            intersection, global_root, global_photons, materials, ray_direction, global_root_node, size
+         );
       }
       return radiance;
    }
@@ -1107,8 +1127,10 @@ namespace cuda
    __global__
    void cuRenderScene(
       uint8_t* image_buffer,
-      const Photon* photons,
-      const KdtreeNode* root,
+      const Photon* global_photons,
+      const Photon* caustic_photons,
+      const KdtreeNode* global_root,
+      const KdtreeNode* caustic_root,
       const AreaLight* lights,
       const Material* materials,
       const Box* world_bounds,
@@ -1119,7 +1141,8 @@ namespace cuda
       const int* vertex_sizes,
       const int* index_sizes,
       Mat inverse_view,
-      int root_node,
+      int global_root_node,
+      int caustic_root_node,
       int width,
       int height,
       int light_num,
@@ -1145,8 +1168,9 @@ namespace cuda
          const float3 ray_direction =
             normalize( transform( inverse_view, make_float3( u, v, -FocalLength ) ) - ray_origin );
          color += estimateRadiance(
-            photons, lights, materials, root, world_bounds, to_worlds, ray_origin, ray_direction,
-            vertices, normals, indices, vertex_sizes, index_sizes, &state, root_node, light_num, object_num, size
+            global_photons, caustic_photons, lights, materials, global_root, caustic_root,
+            world_bounds, to_worlds, ray_origin, ray_direction, vertices, normals, indices,
+            vertex_sizes, index_sizes, &state, global_root_node, caustic_root_node, light_num, object_num, size
          );
       }
       color /= static_cast<float>(SampleNum);
@@ -1160,7 +1184,7 @@ namespace cuda
    PhotonMap::PhotonMap() : Device(), LightNum( 0 ), ObjectNum( 0 ), TotalLightPower( 0.0f )
    {
       ViewMatrix = getViewMatrix(
-         make_float3( 0.0f, 0.733f, 1.5f ),
+         make_float3( 0.0f, 0.733f, 1.7f ),
          make_float3( 0.0f, 0.733f, 0.0f ),
          make_float3( 0.0f, 1.0f, 0.0f )
       );
@@ -1170,7 +1194,6 @@ namespace cuda
    PhotonMap::~PhotonMap()
    {
       if (Device.VertexPtr != nullptr) cudaFree( Device.VertexPtr );
-      if (Device.VertexPtr != nullptr) cudaFree( Device.VertexPtr );
       if (Device.NormalPtr != nullptr) cudaFree( Device.NormalPtr );
       if (Device.IndexPtr != nullptr) cudaFree( Device.IndexPtr );
       if (Device.VertexSizesPtr != nullptr) cudaFree( Device.VertexSizesPtr );
@@ -1179,6 +1202,8 @@ namespace cuda
       if (Device.ToWorldsPtr != nullptr) cudaFree( Device.ToWorldsPtr );
       if (Device.MaterialsPtr != nullptr) cudaFree( Device.MaterialsPtr );
       if (Device.AreaLightsPtr != nullptr) cudaFree( Device.AreaLightsPtr );
+      if (Device.GlobalPhotonsPtr != nullptr) cudaFree( Device.GlobalPhotonsPtr );
+      if (Device.CausticPhotonsPtr != nullptr) cudaFree( Device.CausticPhotonsPtr );
    }
 
    void PhotonMap::initialize()
@@ -1231,13 +1256,15 @@ namespace cuda
 
       buffer_size = sizeof( Photon ) * MaxGlobalPhotonNum;
       CHECK_CUDA( cudaMalloc( reinterpret_cast<void**>(&Device.GlobalPhotonsPtr), buffer_size ) );
+
+      buffer_size = sizeof( Photon ) * MaxCausticPhotonNum;
+      CHECK_CUDA( cudaMalloc( reinterpret_cast<void**>(&Device.CausticPhotonsPtr), buffer_size ) );
    }
 
    void PhotonMap::createPhotonMap()
    {
       initialize();
 
-      std::cout << ">> Create Photon Map ...\n";
       constexpr int block_num = 128;
       constexpr int thread_num = 512;
 
@@ -1245,34 +1272,63 @@ namespace cuda
       std::seed_seq sequence{ std::chrono::system_clock::now().time_since_epoch().count() };
       sequence.generate( seed.begin(), seed.end() );
 
+      std::cout << ">> Create Global Photon Map ...\n";
       int emitted_num = 0;
       CHECK_CUDA( cudaMemcpyToSymbol( emitted_photon_num, &emitted_num, sizeof( int ), 0, cudaMemcpyHostToDevice ) );
 
-      // The block/thread size should be sufficiently small
-      // to distribute photons as uniformly as possible and increase the number of bounces.
-      cuCreatePhotonMap<<<128, 512>>>(
+      cuCreatePhotonMap<<<block_num, thread_num>>>(
          Device.GlobalPhotonsPtr,
          Device.AreaLightsPtr, Device.MaterialsPtr, Device.WorldBoundsPtr, Device.ToWorldsPtr,
          Device.VertexPtr, Device.NormalPtr, Device.IndexPtr, Device.VertexSizesPtr, Device.IndexSizesPtr,
-         LightNum, ObjectNum, seed[0]
+         LightNum, ObjectNum, MaxGlobalPhotonNum, seed[0]
       );
       CHECK_KERNEL;
       CHECK_CUDA( cudaDeviceSynchronize() );
 
       CHECK_CUDA( cudaMemcpyFromSymbol( &emitted_num, emitted_photon_num, sizeof( int ), 0, cudaMemcpyDeviceToHost ) );
-      std::cout << ">> Emitted Photon Num: " << emitted_num << "\n";
+      std::cout << ">> Emitted Global Photon Num: " << emitted_num << "\n";
 
       cuScalePower<<<block_num, thread_num>>>( Device.GlobalPhotonsPtr, TotalLightPower, MaxGlobalPhotonNum );
       CHECK_KERNEL;
-      std::cout << ">> Created Photon Map\n";
+      std::cout << ">> Created Global Photon Map\n";
+
+      std::cout << ">> Create Caustic Photon Map ...\n";
+      emitted_num = 0;
+      CHECK_CUDA( cudaMemcpyToSymbol( emitted_photon_num, &emitted_num, sizeof( int ), 0, cudaMemcpyHostToDevice ) );
+
+      cuCreatePhotonMap<true><<<block_num, thread_num>>>(
+         Device.CausticPhotonsPtr,
+         Device.AreaLightsPtr, Device.MaterialsPtr, Device.WorldBoundsPtr, Device.ToWorldsPtr,
+         Device.VertexPtr, Device.NormalPtr, Device.IndexPtr, Device.VertexSizesPtr, Device.IndexSizesPtr,
+         LightNum, ObjectNum, MaxCausticPhotonNum, seed[0]
+      );
+      CHECK_KERNEL;
+      CHECK_CUDA( cudaDeviceSynchronize() );
+
+      CHECK_CUDA( cudaMemcpyFromSymbol( &emitted_num, emitted_photon_num, sizeof( int ), 0, cudaMemcpyDeviceToHost ) );
+      std::cout << ">> Emitted Caustic Photon Num: " << emitted_num << "\n";
+
+      cuScalePower<<<block_num, thread_num>>>( Device.CausticPhotonsPtr, TotalLightPower, MaxCausticPhotonNum );
+      CHECK_KERNEL;
+      std::cout << ">> Created Caustic Photon Map\n";
 
       std::cout << ">> Build Global Photon Map ...\n";
       GlobalPhotonTree = std::make_shared<KdtreeCUDA>( MaxGlobalPhotonNum, 3 );
-      float* coordinates = GlobalPhotonTree->prepareDeviceCoordinatesPtr();
-      cuPrepareKdtree<<<block_num, thread_num>>>( coordinates, Device.GlobalPhotonsPtr, MaxGlobalPhotonNum );
+      cuPrepareKdtree<<<block_num, thread_num>>>(
+         GlobalPhotonTree->prepareDeviceCoordinatesPtr(), Device.GlobalPhotonsPtr, MaxGlobalPhotonNum
+      );
       CHECK_KERNEL;
       GlobalPhotonTree->create();
       std::cout << ">> Built Global Photon Map\n";
+
+      std::cout << ">> Build Caustic Photon Map ...\n";
+      CausticPhotonTree = std::make_shared<KdtreeCUDA>( MaxCausticPhotonNum, 3 );
+      cuPrepareKdtree<<<block_num, thread_num>>>(
+         CausticPhotonTree->prepareDeviceCoordinatesPtr(), Device.CausticPhotonsPtr, MaxCausticPhotonNum
+      );
+      CHECK_KERNEL;
+      CausticPhotonTree->create();
+      std::cout << ">> Built Caustic Photon Map\n";
    }
 
    Mat PhotonMap::getViewMatrix(const float3& eye, const float3& center, const float3& up)
@@ -1297,13 +1353,13 @@ namespace cuda
 		return view;
    }
 
-   void PhotonMap::visualizePhotonMap(int width, int height)
+   void PhotonMap::visualizeGlobalPhotonMap(int width, int height)
    {
       std::cout << ">> Visualize Global Photon Map ...\n";
       uint8_t* image_buffer_ptr = nullptr;
       const size_t buffer_size = sizeof( uint8_t ) * width * height * 3;
       CHECK_CUDA( cudaMalloc( reinterpret_cast<void**>(&image_buffer_ptr), buffer_size ) );
-#if 0
+#if 1
       constexpr dim3 block(32, 32);
       const dim3 grid(divideUp( width, static_cast<int>(block.x) ), divideUp( height, static_cast<int>(block.y) ));
       cuVisualizePhotonMap<<<grid, block>>>(
@@ -1335,6 +1391,44 @@ namespace cuda
       std::cout << ">> Visualized Global Photon Map\n";
    }
 
+   void PhotonMap::visualizeCausticPhotonMap(int width, int height)
+   {
+      std::cout << ">> Visualize Caustic Photon Map ...\n";
+      uint8_t* image_buffer_ptr = nullptr;
+      const size_t buffer_size = sizeof( uint8_t ) * width * height * 3;
+      CHECK_CUDA( cudaMalloc( reinterpret_cast<void**>(&image_buffer_ptr), buffer_size ) );
+#if 1
+      constexpr dim3 block(32, 32);
+      const dim3 grid(divideUp( width, static_cast<int>(block.x) ), divideUp( height, static_cast<int>(block.y) ));
+      cuVisualizePhotonMap<<<grid, block>>>(
+         image_buffer_ptr,
+         Device.CausticPhotonsPtr, CausticPhotonTree->getRoot(),
+         Device.WorldBoundsPtr, Device.ToWorldsPtr,
+         Device.VertexPtr, Device.NormalPtr, Device.IndexPtr, Device.VertexSizesPtr, Device.IndexSizesPtr,
+         InverseViewMatrix, CausticPhotonTree->getRootNode(), width, height, ObjectNum, MaxCausticPhotonNum
+      );
+#else
+      cuVisualizeAllPhotons<<<128, 512>>>(
+         image_buffer_ptr, Device.CausticPhotonsPtr, ViewMatrix, width, height, MaxCausticPhotonNum
+      );
+#endif
+      CHECK_KERNEL;
+      CHECK_CUDA( cudaDeviceSynchronize() );
+
+      auto* image_buffer = new uint8_t[width * height * 3];
+      CHECK_CUDA( cudaMemcpy( image_buffer, image_buffer_ptr, buffer_size, cudaMemcpyDeviceToHost ) );
+      cudaFree( image_buffer_ptr );
+
+      FIBITMAP* image = FreeImage_ConvertFromRawBits(
+         image_buffer, width, height, width * 3, 24,
+         FI_RGBA_RED_MASK, FI_RGBA_GREEN_MASK, FI_RGBA_BLUE_MASK, false
+      );
+      FreeImage_Save( FIF_PNG, image, "../caustic_photons.png" );
+      FreeImage_Unload( image );
+      delete [] image_buffer;
+      std::cout << ">> Visualized Caustic Photon Map\n";
+   }
+
    void PhotonMap::render(int width, int height)
    {
       std::cout << ">> Rendering ...\n";
@@ -1350,10 +1444,10 @@ namespace cuda
       const dim3 grid(divideUp( width, static_cast<int>(block.x) ), divideUp( height, static_cast<int>(block.y) ));
       cuRenderScene<<<grid, block>>>(
          image_buffer_ptr,
-         Device.GlobalPhotonsPtr, GlobalPhotonTree->getRoot(),
+         Device.GlobalPhotonsPtr, Device.CausticPhotonsPtr, GlobalPhotonTree->getRoot(), CausticPhotonTree->getRoot(),
          Device.AreaLightsPtr, Device.MaterialsPtr, Device.WorldBoundsPtr, Device.ToWorldsPtr,
          Device.VertexPtr, Device.NormalPtr, Device.IndexPtr, Device.VertexSizesPtr, Device.IndexSizesPtr,
-         InverseViewMatrix, GlobalPhotonTree->getRootNode(), width, height,
+         InverseViewMatrix, GlobalPhotonTree->getRootNode(), CausticPhotonTree->getRootNode(), width, height,
          LightNum, ObjectNum, MaxGlobalPhotonNum, seed[0]
       );
       CHECK_KERNEL;

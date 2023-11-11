@@ -204,7 +204,7 @@ void RendererGL::setObjects()
          glm::translate( glm::mat4(1.0f), glm::vec3(50.0f, 30.0f, 200.0f) ) *
          glm::rotate( glm::mat4(1.0f), glm::radians( -30.0f ), glm::vec3(1.0f, 0.0f, 0.0f) ) * to_tiger_object
       ),*/
-      std::make_tuple(
+      /*std::make_tuple(
          std::string(sample_directory_path + "/CornellBox/floor.obj"),
          std::string(sample_directory_path + "/CornellBox/floor.mtl"),
          ObjectGL::TYPE::PLANE, cornell_box_scale
@@ -238,7 +238,7 @@ void RendererGL::setObjects()
          std::string(sample_directory_path + "/CornellBox/right_sphere.obj"),
          std::string(sample_directory_path + "/CornellBox/right_sphere.mtl"),
          ObjectGL::TYPE::SPHERE, cornell_box_scale
-      ),
+      ),*/
       std::make_tuple(
          std::string(sample_directory_path + "/CornellBox/water.obj"),
          std::string(sample_directory_path + "/CornellBox/water.mtl"),
@@ -251,9 +251,6 @@ void RendererGL::setObjects()
       )
    };
    PhotonMap->setObjects( objects );
-
-   GlobalPhotonMap = std::make_unique<ImageGL>();
-   GlobalPhotonMap->create( FrameWidth, FrameHeight );
 }
 
 void RendererGL::setShaders() const
@@ -263,8 +260,6 @@ void RendererGL::setShaders() const
       std::string(shader_directory_path + "/scene_shader.vert").c_str(),
       std::string(shader_directory_path + "/scene_shader.frag").c_str()
    );
-   setKdtreeShaders();
-   setPhotonMapShaders();
 }
 
 void RendererGL::drawScene()
@@ -329,15 +324,13 @@ void RendererGL::play()
 
    setObjects();
    setShaders();
-   createPhotonMap();
-   visualizePhotonMap();
 
-   /*glfwShowWindow( Window );
+   glfwShowWindow( Window );
    while (!glfwWindowShouldClose( Window )) {
       if (!Pause) render();
 
       glfwSwapBuffers( Window );
       glfwPollEvents();
    }
-   glfwDestroyWindow( Window );*/
+   glfwDestroyWindow( Window );
 }
