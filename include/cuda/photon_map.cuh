@@ -15,8 +15,8 @@ namespace cuda
    static constexpr int SampleNum = 8;
    static constexpr int IndirectSampleNum = 16;
    static constexpr int TransmissiveSampleNum = 16;
-   static constexpr int MaxDepth = 128;
-   static constexpr int NeighborNum = 64;
+   static constexpr int MaxDepth = 32;
+   static constexpr int NeighborNum = 128;
    static constexpr int MaxGlobalPhotonNum = 1'048'576;
    static constexpr int MaxCausticPhotonNum = 1'048'576;
    static constexpr float RayEpsilon = 1e-3f;
@@ -327,6 +327,8 @@ namespace cuda
       CUDADevice Device;
       int LightNum;
       int ObjectNum;
+      int EmittedGlobalPhotonNum;
+      int EmittedCausticPhotonNum;
       float TotalLightPower;
       Mat ViewMatrix;
       Mat InverseViewMatrix;
