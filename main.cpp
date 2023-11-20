@@ -56,8 +56,8 @@ void testCUDA()
 
    const std::vector<std::tuple<std::string, std::string, cuda::Mat>> lights = {
       std::make_tuple(
-         std::string(sample_directory_path + "/CornellBox/light.obj"),
-         std::string(sample_directory_path + "/CornellBox/light.mtl"),
+         std::string(sample_directory_path + "/CornellBox/light_ceiling.obj"),
+         std::string(sample_directory_path + "/CornellBox/light_ceiling.mtl"),
          cornell_box_scale
       )
    };
