@@ -974,7 +974,7 @@ namespace cuda
                vertices, normals, indices, vertex_sizes, index_sizes, state, light_num, object_num
             ) * weight;
          }
-         if (m.useDiffuse()) {
+         if (UseCaustics && m.useDiffuse()) {
             radiance += computeRadianceWithPhotonMap(
                next_intersection, caustic_root, caustic_photons, materials, ray_direction, caustic_root_node, size
             ) * weight;
@@ -1064,7 +1064,7 @@ namespace cuda
             vertices, normals, indices, vertex_sizes, index_sizes, state, light_num, object_num
          );
       }
-
+return radiance;
       float fresnel = 1.0f;
       if (m.useRefractionRay()) {
          fresnel =
@@ -1101,9 +1101,11 @@ namespace cuda
             );
          }
          radiance += indirect / static_cast<float>(IndirectSampleNum);
-         radiance += computeRadianceWithPhotonMap(
-            intersection, caustic_root, caustic_photons, materials, ray_direction, caustic_root_node, size
-         );
+         if (UseCaustics) {
+            radiance += computeRadianceWithPhotonMap(
+               intersection, caustic_root, caustic_photons, materials, ray_direction, caustic_root_node, size
+            );
+         }
          radiance += computeRadianceWithPhotonMap(
             intersection, global_root, global_photons, materials, ray_direction, global_root_node, size
          );
@@ -1170,7 +1172,8 @@ namespace cuda
 
    PhotonMap::PhotonMap() :
       Device(), LightNum( 0 ), ObjectNum( 0 ), EmittedGlobalPhotonNum( 0 ), EmittedCausticPhotonNum( 0 ),
-      TotalLightPower( 0.0f )
+      TotalLightPower( 0.0f ), GlobalPhotonTree( std::make_shared<KdtreeCUDA>( MaxGlobalPhotonNum, 3 ) ),
+      CausticPhotonTree( std::make_shared<KdtreeCUDA>( MaxCausticPhotonNum, 3 ) )
    {
       ViewMatrix = getViewMatrix(
          make_float3( 0.0f, 0.733f, 1.7f ),
@@ -1282,6 +1285,16 @@ namespace cuda
       CHECK_KERNEL;
       std::cout << ">> Created Global Photon Map\n";
 
+      std::cout << ">> Build Global Photon Map ...\n";
+      cuPrepareKdtree<<<block_num, thread_num>>>(
+         GlobalPhotonTree->prepareDeviceCoordinatesPtr(), Device.GlobalPhotonsPtr, MaxGlobalPhotonNum
+      );
+      CHECK_KERNEL;
+      GlobalPhotonTree->create();
+      std::cout << ">> Built Global Photon Map\n";
+
+      if (!UseCaustics) return;
+
       std::cout << ">> Create Caustic Photon Map ...\n";
       CHECK_CUDA(
          cudaMemcpyToSymbol( emitted_photon_num, &EmittedCausticPhotonNum, sizeof( int ), 0, cudaMemcpyHostToDevice )
@@ -1305,17 +1318,7 @@ namespace cuda
       CHECK_KERNEL;
       std::cout << ">> Created Caustic Photon Map\n";
 
-      std::cout << ">> Build Global Photon Map ...\n";
-      GlobalPhotonTree = std::make_shared<KdtreeCUDA>( MaxGlobalPhotonNum, 3 );
-      cuPrepareKdtree<<<block_num, thread_num>>>(
-         GlobalPhotonTree->prepareDeviceCoordinatesPtr(), Device.GlobalPhotonsPtr, MaxGlobalPhotonNum
-      );
-      CHECK_KERNEL;
-      GlobalPhotonTree->create();
-      std::cout << ">> Built Global Photon Map\n";
-
       std::cout << ">> Build Caustic Photon Map ...\n";
-      CausticPhotonTree = std::make_shared<KdtreeCUDA>( MaxCausticPhotonNum, 3 );
       cuPrepareKdtree<<<block_num, thread_num>>>(
          CausticPhotonTree->prepareDeviceCoordinatesPtr(), Device.CausticPhotonsPtr, MaxCausticPhotonNum
       );
