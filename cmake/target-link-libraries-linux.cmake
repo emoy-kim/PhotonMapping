@@ -1,9 +1,4 @@
 target_link_libraries(
      PhotonMapping
-        glad
-        glfw3
-        pthread
-        dl
-        X11
         freeimage
 )

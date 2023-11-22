@@ -1064,7 +1064,7 @@ namespace cuda
             vertices, normals, indices, vertex_sizes, index_sizes, state, light_num, object_num
          );
       }
-return radiance;
+
       float fresnel = 1.0f;
       if (m.useRefractionRay()) {
          fresnel =
