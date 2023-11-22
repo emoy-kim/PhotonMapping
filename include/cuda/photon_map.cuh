@@ -12,6 +12,7 @@
 
 namespace cuda
 {
+   static constexpr bool UseCaustics = true;
    static constexpr int SampleNum = 8;
    static constexpr int IndirectSampleNum = 16;
    static constexpr int TransmissiveSampleNum = 16;
