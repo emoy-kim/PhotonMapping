@@ -48,7 +48,7 @@ int main()
          cornell_box_scale
       ),
       std::make_tuple(
-         std::string(sample_directory_path + "/CornellBox/water_surface.obj"),
+         std::string(sample_directory_path + "/CornellBox/water.obj"),
          std::string(sample_directory_path + "/CornellBox/water.mtl"),
          cornell_box_scale
       )
