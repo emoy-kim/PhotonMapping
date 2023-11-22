@@ -2,7 +2,7 @@
 
   Global illumination using photon maps with CUDA.
   
-  Test files used are from [here](https://benedikt-bitterli.me/resources/).
+  Test files used are from [1](https://benedikt-bitterli.me/resources/) and [2](https://casual-effects.com/data/).
 
   * The number of samples per ray: **8**
   * The number of samples for indirect illumination: **16**
